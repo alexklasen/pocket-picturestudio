@@ -285,7 +285,7 @@ dialog .chips{margin-bottom:14px}
     <div id="grip" title="Ziehen: Größe ändern · Antippen: ein-/ausklappen" role="separator" aria-label="Größe des Einstellungsbereichs"><span></span></div>
     <div class="panels">
       <div id="targetBar" hidden>
-        <span class="tb-txt"><svg viewBox="0 0 24 24"><path d="m12 2 10 5-10 5L2 7z"/><path d="m2 12 10 5 10-5"/><path d="m2 17 10 5 10-5"/></svg>Ebene: <b id="targetName"></b></span>
+        <span class="tb-txt"><svg viewBox="0 0 24 24"><path d="m12 2 10 5-10 5L2 7z"/><path d="m2 12 10 5 10-5"/><path d="m2 17 10 5 10-5"/></svg><span id="targetLabel">Ebene:</span> <b id="targetName"></b></span>
         <button id="targetDone">Fertig</button>
       </div>
       <!-- Zuschnitt -->
@@ -360,6 +360,7 @@ dialog .chips{margin-bottom:14px}
           <button class="tool" id="actCut" disabled><svg viewBox="0 0 24 24"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M20 4 8.1 15.9M14.5 14.5 20 20M8.1 8.1 12 12"/></svg>Ausschneiden</button>
           <button class="tool" id="actCopy" disabled><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>Kopieren</button>
           <button class="tool" id="actPaste"><svg viewBox="0 0 24 24"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></svg>Einfügen</button>
+          <button class="tool" id="actAdjust" disabled><svg viewBox="0 0 24 24"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg>Einstellungen</button>
           <button class="tool" id="actBlur" disabled><svg viewBox="0 0 24 24"><path d="M12 2.7s-6 6.4-6 11.3a6 6 0 0 0 12 0c0-4.9-6-11.3-6-11.3z"/><path d="M9 14h6M10 17h4" opacity=".6"/></svg>Weichzeichnen</button>
           <button class="tool" id="actDelete" disabled><svg viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg>Löschen</button>
         </div>
@@ -537,6 +538,7 @@ const S = {
   objs: [],                                    // Ebenen: Text, Bild, Ausschnitt
   holes: [],                                   // gelöschte Bereiche {id, pts (Polygon, normiert), hidden}
   blurs: [],                                   // weichgezeichnete Bereiche {id, pts, amt, hidden}
+  adjs: [],                                    // Anpassungsbereiche {id, type:'adjust', pts, look, feather, invert, hidden} – wirken direkt aufs Foto
   fx: 'none'                                   // gewählter Kreativ-Effekt
 };
 const assets = new Map();                      // eingefügte Bilder (nicht im Verlauf)
@@ -1420,6 +1422,11 @@ function drawScene(ctx, T, src, o) {
   if (!o.full) { ctx.beginPath(); ctx.rect(r.x, r.y, r.w, r.h); ctx.clip(); }
   ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
   drawSrc(ctx, src, r.x, r.y, r.w, r.h, r.x, r.y, r.w, r.h);
+  if (o.objects) for (const a of S.adjs) {        // Anpassungsbereiche gehören zum Foto (unter Vignette und Ebenen)
+    if (a.hidden || !hasLook(a)) continue;
+    const lc = src.layers ? src.layers.get(a.id) : layerCache.get(a.id);
+    if (lc) ctx.drawImage(lc.cv, lc.bx, lc.by, lc.bw, lc.bh);
+  }
   if (o.vignette) drawVignette(ctx, r.x, r.y, r.w, r.h, S.p.vignette);
   if (o.holes !== 'none' && S.holes.some(h => !h.hidden)) {
     ctx.save();
@@ -1622,7 +1629,7 @@ function drawObject(ctx, ob, src) {
   ctx.restore();
 }
 const activeObj = () => S.objs.find(o => o.id === activeId) || null;
-const activeRegion = () => S.blurs.find(r => r.id === activeId) || S.holes.find(r => r.id === activeId) || null;
+const activeRegion = () => S.adjs.find(r => r.id === activeId) || S.blurs.find(r => r.id === activeId) || S.holes.find(r => r.id === activeId) || null;
 const isBlurRegion = r => S.blurs.includes(r);
 function screenToBase(pt) { const T = lay.T; return { x: (pt.x - T.ox) / T.k, y: (pt.y - T.oy) / T.k }; }
 function screenToNorm(pt) { const b = screenToBase(pt); return { x: b.x / base.width, y: b.y / base.height }; }
@@ -1635,7 +1642,7 @@ function inPoly(x, y, p) {
   return inside;
 }
 function regionAt(n) {
-  for (const list of [S.blurs, S.holes])
+  for (const list of [S.adjs, S.blurs, S.holes])
     for (let i = list.length - 1; i >= 0; i--) if (!list[i].hidden && inPoly(n.x, n.y, list[i].pts)) return list[i];
   return null;
 }
@@ -1668,7 +1675,7 @@ function objCorners(ob) {
 let target = null;                                   // Ebene, deren Look gerade bearbeitet wird (null = Foto)
 const TILT_KEYS = new Set(GROUPS.tilt.map(x => x[0]));
 const newLook = () => ({ p: { ...DEFAULTS }, fx: 'none', inherit: true });
-const targetObj = () => target ? S.objs.find(o => o.id === target) || null : null;
+const targetObj = () => target ? S.objs.find(o => o.id === target) || S.adjs.find(o => o.id === target) || null : null;
 function TP() { const o = targetObj(); return o && o.look ? o.look.p : S.p; }      // Regler-Werte des aktuellen Ziels
 function TFX() { const o = targetObj(); return o && o.look ? o.look.fx : S.fx; }
 function setTFX(t) { const o = targetObj(); if (o && o.look) o.look.fx = t; else S.fx = t; }
@@ -1681,12 +1688,32 @@ function hasLook(ob) {
 }
 const layerCache = new Map();                       // id → { key, cv, bx, by, bw, bh }
 // Ausgangsbild der Ebene + Box in Objekt-Koordinaten (Basis-Pixel, ohne Skalierung/Drehung). k = Ziel-Pixel je Basis-Pixel
-function layerSource(ob, k, proc, orig) {
+function layerSource(ob, k, proc, orig, prev) {
   const bw0 = base.width, bh0 = base.height, U = Math.sqrt(bw0 * bh0);
   if (ob.type === 'image') {
     const a = assets.get(ob.asset); if (!a) return null;
     const w = ob.w * U, h = ob.h * U;
     return { cv: a.img, bx: -w / 2, by: -h / 2, bw: w, bh: h };
+  }
+  if (ob.type === 'adjust') {                        // Bereich des Fotos (absolute Basis-Pixel), mit Rand für die weiche Kante
+    const src = ob.look.inherit ? proc : orig, F = adjFeather(ob);
+    const sx0 = src.bx, sy0 = src.by, sx1 = src.bx + src.canvas.width / src.k, sy1 = src.by + src.canvas.height / src.k;
+    let x0, y0, x1, y1;
+    if (ob.invert) { x0 = sx0; y0 = sy0; x1 = sx1; y1 = sy1; }
+    else {
+      const g = cutGeom(ob);
+      x0 = Math.max(sx0, g.x - F); y0 = Math.max(sy0, g.y - F); x1 = Math.min(sx1, g.x + g.w + F); y1 = Math.min(sy1, g.y + g.h + F);
+    }
+    if (x1 - x0 < 1 || y1 - y0 < 1) return null;
+    const cw = Math.max(1, Math.round((x1 - x0) * src.k)), ch = Math.max(1, Math.round((y1 - y0) * src.k));
+    const cv = document.createElement('canvas'); cv.width = cw; cv.height = ch;
+    const c2 = cv.getContext('2d');
+    drawSrc(c2, src, x0, y0, x1 - x0, y1 - y0, 0, 0, cw, ch);
+    if (ob.look.inherit && prev) {                    // Bereiche stapeln: vorherige Anpassungen sind Teil der Grundlage
+      const sc = cw / (x1 - x0);
+      for (const c of prev) c2.drawImage(c.cv, (c.bx - x0) * sc, (c.by - y0) * sc, c.bw * sc, c.bh * sc);
+    }
+    return { cv, bx: x0, by: y0, bw: x1 - x0, bh: y1 - y0 };
   }
   if (ob.type === 'cut') {
     const g = cutGeom(ob), src = ob.look.inherit ? proc : orig;
@@ -1724,8 +1751,8 @@ function bleedAlpha(id) {
   }
 }
 // Look einer Ebene berechnen (GPU-Textursatz 'aux'). k: Ziel-Pixel je Basis-Pixel (Vorschau 1, Export > 1)
-function processLayer(ob, k, proc, orig) {
-  const sl = layerSource(ob, k, proc, orig); if (!sl) return null;
+function processLayer(ob, k, proc, orig, prev) {
+  const sl = layerSource(ob, k, proc, orig, prev); if (!sl) return null;
   const cap = k > 1.01 ? (GL ? Math.min(4096, GL.maxTex) : 4096) : 1400;
   const f = Math.min(1, cap / Math.max(sl.cv.width, sl.cv.height));
   const w = Math.max(1, Math.round(sl.cv.width * f)), h = Math.max(1, Math.round(sl.cv.height * f));
@@ -1737,7 +1764,7 @@ function processLayer(ob, k, proc, orig) {
   const p = { ...ob.look.p, tsBlur: 0 };
   const needDet = p.structure !== 0 || p.sharpness !== 0;
   const det = needDet ? computeDetail(id.data, w, h, 1, Math.max(2, Math.round(Math.min(w, h) * 0.012))) : null;
-  const scale = (w / sl.bw) / Math.max(0.01, ob.s);  // Ebenen-Pixel je Basis-Pixel → Linienstärken wie beim Foto
+  const scale = (w / sl.bw) / Math.max(0.01, ob.s || 1);  // Ebenen-Pixel je Basis-Pixel → Linienstärken wie beim Foto
   if (GL) {
     glUpload(id.data, w, h, det ? toRG(det) : null, 'aux');
     glRun(p, { C: [w / 2, h / 2], N: [0, 1], HW: 0, F: 1, R: 0, L: Math.min(w, h), crop: [0, 0, w, h], mask: false, fx: ob.look.fx }, scale, 'aux');
@@ -1746,23 +1773,55 @@ function processLayer(ob, k, proc, orig) {
     const out = cx.createImageData(w, h); process(id, w, h, p, det, out); cx.putImageData(out, 0, 0);
   }
   if (p.vignette) { cx.globalCompositeOperation = 'source-atop'; drawVignette(cx, 0, 0, w, h, p.vignette); cx.globalCompositeOperation = 'source-over'; }
+  if (ob.type === 'adjust') {                        // Maske mit weicher Kante (oder umgekehrt) anwenden
+    cx.globalCompositeOperation = 'destination-in'; cx.imageSmoothingEnabled = true;
+    cx.drawImage(adjMask(ob, sl.bx, sl.by, sl.bw, sl.bh), 0, 0, w, h);
+    cx.globalCompositeOperation = 'source-over';
+  }
   return { cv, bx: sl.bx, by: sl.by, bw: sl.bw, bh: sl.bh };
+}
+// Weiche Kante eines Anpassungsbereichs in Basis-Pixeln (Regler 0–100 → bis 10 % der kürzeren Bildseite)
+function adjFeather(ob) { return (ob.feather || 0) / 100 * 0.1 * Math.min(S.crop.w * base.width, S.crop.h * base.height); }
+// Maske für einen Anpassungsbereich über der Box (x0, y0, w, h in Basis-Pixeln); weich gezeichnet per Box-Blur (geringe Auflösung)
+function adjMask(ob, x0, y0, w, h) {
+  const ms = Math.min(1, 640 / Math.max(w, h)), mw = Math.max(1, Math.ceil(w * ms)), mh = Math.max(1, Math.ceil(h * ms));
+  const m = document.createElement('canvas'); m.width = mw; m.height = mh;
+  const x = m.getContext('2d', { willReadFrequently: true });
+  const path = new Path2D(); polyPath(path, ob.pts, base.width * ms, base.height * ms, -x0 * ms, -y0 * ms);
+  x.fillStyle = '#fff';
+  if (ob.invert) { x.fillRect(0, 0, mw, mh); x.globalCompositeOperation = 'destination-out'; x.fill(path); x.globalCompositeOperation = 'source-over'; }
+  else x.fill(path);
+  const r = Math.round(adjFeather(ob) * ms * 0.5);
+  if (r >= 1) {
+    const id = x.getImageData(0, 0, mw, mh), n = mw * mh, a = new Float32Array(n);
+    for (let i = 0; i < n; i++) a[i] = id.data[4 * i + 3];
+    const b = blur(a, mw, mh, r, 3);
+    for (let i = 0; i < n; i++) { id.data[4*i] = id.data[4*i+1] = id.data[4*i+2] = 255; id.data[4*i+3] = b[i]; }
+    x.putImageData(id, 0, 0);
+  }
+  return m;
 }
 function layerKey(ob, k) {
   const t = ob.type;
   return JSON.stringify([ob.look, t, base.width, base.height, k,
     t === 'text' ? [ob.text, ob.font, ob.bold, ob.color, ob.stroke, ob.strokeColor, ob.shadow, ob.bg, ob.align, Math.round(ob.s * 100)]
-    : t === 'cut' ? [ob.pts, ob.look.inherit ? baseVer : 0] : ob.asset]);
+    : t === 'cut' ? [ob.pts, ob.look.inherit ? baseVer : 0]
+    : t === 'adjust' ? [ob.pts, ob.feather, ob.invert, ob.look.inherit ? baseVer : 0, S.crop] : ob.asset]);
 }
 // Vorschau: Ebenen-Looks bei Bedarf neu berechnen (vor dem Zeichnen)
 function processLayers() {
   if (!base || cam.on) return;
-  for (const ob of S.objs) {
+  let chain = ''; const prev = [];                  // Anpassungsbereiche bauen aufeinander auf (Reihenfolge = Liste)
+  for (const ob of [...S.adjs, ...S.objs]) {
     if (ob.hidden || !hasLook(ob)) continue;
-    const key = layerKey(ob, 1), c = layerCache.get(ob.id);
-    if (c && c.key === key) continue;
-    const r = processLayer(ob, 1, previewSrc(), { canvas: base, bx: 0, by: 0, k: 1 });
-    if (r) { r.key = key; layerCache.set(ob.id, r); }
+    const adj = ob.type === 'adjust';
+    const key = layerKey(ob, 1) + (adj && ob.look.inherit ? chain : ''), c = layerCache.get(ob.id);
+    let r = c && c.key === key ? c : null;
+    if (!r) {
+      r = processLayer(ob, 1, previewSrc(), { canvas: base, bx: 0, by: 0, k: 1 }, adj ? prev : null);
+      if (r) { r.key = key; layerCache.set(ob.id, r); } else layerCache.delete(ob.id);
+    }
+    if (adj) { chain += '|' + key; if (r) prev.push(r); }
   }
 }
 /* =====================================================================
@@ -1832,7 +1891,7 @@ function drawLayersOverlay() {
   const polyScreen = p => { vctx.beginPath(); for (let i = 0; i < p.length; i += 2) { const x = T.ox + p[i] * bw * T.k, y = T.oy + p[i+1] * bh * T.k; i ? vctx.lineTo(x, y) : vctx.moveTo(x, y); } vctx.closePath(); };
   const ar = activeRegion();
   vctx.save();
-  for (const r of [...S.blurs, ...S.holes]) {
+  for (const r of [...S.adjs, ...S.blurs, ...S.holes]) {
     if (r.hidden || r === ar) continue;
     polyScreen(r.pts); vctx.setLineDash([4, 4]); vctx.lineWidth = 1; vctx.strokeStyle = 'rgba(255,255,255,.55)'; vctx.stroke();
   }
@@ -2216,6 +2275,7 @@ function mapScene(fn, objRot) {
   const mp = a => { const o = new Array(a.length); for (let i = 0; i < a.length; i += 2) { const q = fn(a[i], a[i+1]); o[i] = r5(q[0]); o[i+1] = r5(q[1]); } return o; };
   S.holes = S.holes.map(r => ({ ...r, pts: mp(r.pts) }));
   S.blurs = S.blurs.map(r => ({ ...r, pts: mp(r.pts) }));
+  S.adjs = S.adjs.map(r => ({ ...r, pts: mp(r.pts) }));
   S.objs = S.objs.map(o => {
     const q = fn(o.x, o.y), n = { ...o, x: q[0], y: q[1], rot: objRot(o) };
     if (o.pts) n.pts = mp(o.pts);
@@ -2341,10 +2401,11 @@ function thumbSource(T) {
   const ls = tob ? layerSource(tob, 1, previewSrc(), { canvas: base, bx: 0, by: 0, k: 1 }) : null;
   const srcCv = ls ? ls.cv : cam.on ? camCv : base;
   const c = ls || cam.on ? { x: 0, y: 0, w: 1, h: 1 } : S.crop, bw = srcCv.width, bh = srcCv.height;
-  const sw = c.w*bw, sh = c.h*bh, side = ls ? Math.max(sw, sh) : Math.min(sw, sh);
+  const whole = ls && tob.type !== 'adjust';          // Ebenen ganz zeigen, Anpassungsbereiche füllend
+  const sw = c.w*bw, sh = c.h*bh, side = whole ? Math.max(sw, sh) : Math.min(sw, sh);
   const t = document.createElement('canvas'); t.width = t.height = T;
   const tc = t.getContext('2d', { willReadFrequently: true }); tc.imageSmoothingQuality = 'high';
-  if (ls) { tc.fillStyle = '#9a9ea6'; tc.fillRect(0, 0, T, T); }   // Ebene ganz zeigen, auf neutralem Grund
+  if (whole) { tc.fillStyle = '#9a9ea6'; tc.fillRect(0, 0, T, T); }   // Ebene ganz zeigen, auf neutralem Grund
   tc.drawImage(srcCv, c.x*bw + (sw - side)/2, c.y*bh + (sh - side)/2, side, side, 0, 0, T, T);
   const data = tc.getImageData(0, 0, T, T), det = computeDetail(data.data, T, T, 1, 2);
   if (GL) glUpload(data.data, T, T, toRG(det), 'aux');
@@ -2418,7 +2479,7 @@ syncFx();
 
 // --- Ziel der Regler: Foto oder eine Ebene ---
 function setTarget(id) {
-  const o = id ? S.objs.find(x => x.id === id) : null;
+  const o = id ? S.objs.find(x => x.id === id) || S.adjs.find(x => x.id === id) : null;
   if (o && !o.look) o.look = newLook();
   target = o ? o.id : null;
   syncSliders(); syncFx(); syncTargetUI();
@@ -2429,7 +2490,7 @@ function setTarget(id) {
 function syncTargetUI() {
   const o = targetObj();
   $('#targetBar').hidden = !(o && (tab === 'adjust' || tab === 'effects' || tab === 'filter'));
-  if (o) $('#targetName').textContent = itemName(o);
+  if (o) { $('#targetName').textContent = itemName(o); $('#targetLabel').textContent = o.type === 'adjust' ? 'Bereich:' : 'Ebene:'; }
   $('#tiltLayerNote').hidden = !o;
   document.querySelectorAll('[data-panel="effects"] .sub[data-sub="tilt"] > :not(#tiltLayerNote)').forEach(e => e.classList.toggle('off', !!o));
 }
@@ -2471,6 +2532,7 @@ function removeItem(id) {
   S.objs = S.objs.filter(o => o.id !== id);
   S.blurs = S.blurs.filter(r => r.id !== id);
   S.holes = S.holes.filter(r => r.id !== id);
+  S.adjs = S.adjs.filter(r => r.id !== id);
   if (activeId === id) activeId = null;
   if (target === id) setTarget(null);
   layerCache.delete(id);
@@ -2478,7 +2540,7 @@ function removeItem(id) {
   if (blur) schedule();
 }
 const removeObj = removeItem;
-const findItem = id => S.objs.find(o => o.id === id) || S.blurs.find(r => r.id === id) || S.holes.find(r => r.id === id);
+const findItem = id => S.objs.find(o => o.id === id) || S.adjs.find(r => r.id === id) || S.blurs.find(r => r.id === id) || S.holes.find(r => r.id === id);
 function toggleHidden(id) {
   const it = findItem(id); if (!it) return;
   it.hidden = !it.hidden;
@@ -2605,6 +2667,16 @@ function doBlurSel() {
   toast('Bereich weichgezeichnet – Stärke darunter einstellbar, ziehen verschiebt ihn');
 }
 $('#actBlur').onclick = doBlurSel;
+// Auswahl → Anpassungsbereich: Einstellungen & Effekte wirken direkt auf diesen Teil des Fotos
+function doAdjustSel() {
+  if (!sel) { toast('Erst mit Rechteck, Ellipse oder Lasso einen Bereich auswählen'); return; }
+  const r = { id: uid(), type: 'adjust', pts: sel.slice(), look: newLook(), feather: 20, invert: false };
+  S.adjs.push(r); sel = null;
+  setTool('move'); select(r.id); commit();
+  setTarget(r.id); setTab('adjust');
+  toast('Regler, Filter und Effekte wirken jetzt nur in diesem Bereich – „Fertig“ oben beendet');
+}
+$('#actAdjust').onclick = doAdjustSel;
 
 // --- kleine UI-Bausteine ---
 // Schieberegler mit eigener Zeigerlogik (der Browser-Regler selbst bekommt keine Zeiger-Events mehr):
@@ -2729,10 +2801,11 @@ function itemName(it) {
   if (it.type === 'text') return '„' + ((it.text || '').split('\n')[0].slice(0, 30) || '…') + '“';
   if (it.type === 'image') return 'Eingefügtes Bild';
   if (it.type === 'cut') return 'Ausschnitt aus dem Foto';
+  if (it.type === 'adjust') return 'Anpassung' + (S.adjs.length > 1 ? ' ' + (S.adjs.indexOf(it) + 1) : '') + (it.invert ? ' (außen)' : '');
   const blur = isBlurRegion(it), list = blur ? S.blurs : S.holes;
   return (blur ? 'Weichgezeichneter Bereich' : 'Gelöschter Bereich') + (list.length > 1 ? ' ' + (list.indexOf(it) + 1) : '');
 }
-const itemKind = it => (it.type === 'text' ? 'Text' : it.type === 'image' ? 'Bild' : it.type === 'cut' ? 'Ausschnitt' : isBlurRegion(it) ? 'Unschärfe' : 'Gelöscht') + (it.type && hasLook(it) ? ' · fx' : '');
+const itemKind = it => (it.type === 'text' ? 'Text' : it.type === 'image' ? 'Bild' : it.type === 'cut' ? 'Ausschnitt' : it.type === 'adjust' ? 'Anpassung' : isBlurRegion(it) ? 'Unschärfe' : 'Gelöscht') + (it.type && hasLook(it) ? ' · fx' : '');
 
 let propsFor = null, propCtl = {};
 function buildProps(a) {
@@ -2740,6 +2813,27 @@ function buildProps(a) {
   const box = $('#props'); box.innerHTML = ''; propCtl = {};
   if (!a) return;
   box.appendChild(el('div', 'sep'));
+  // Anpassungsbereich: eigener Look direkt auf dem Foto
+  if (a.type === 'adjust') {
+    box.appendChild(lbl('ANPASSUNGSBEREICH'));
+    box.appendChild(el('div', 'hint', 'Einstellungen & Effekte wirken direkt auf diesen Teil des Fotos. Im Bild ziehen = verschieben.'));
+    const la = el('div', 'tools compact');
+    const eb = tbtn('Einstellungen & Effekte bearbeiten', () => { setTarget(a.id); setTab('adjust'); }); eb.classList.add('accentbtn');
+    la.append(eb);
+    if (hasLook(a)) la.append(tbtn('Zurücksetzen', () => { a.look = newLook(); layerCache.delete(a.id); commit(); updateLayersUI(true); render(); }));
+    box.appendChild(la);
+    const fe = mkSlider({ label: 'Weiche Kante', min: 0, max: 100, value: a.feather || 0, def: 20, onInput: v => { a.feather = v; render(); }, onChange: commit });
+    box.appendChild(fe.row);
+    box.appendChild(lbl('WIRKT'));
+    box.appendChild(mkChips([['in', 'In der Auswahl'], ['out', 'Außerhalb']], a.invert ? 'out' : 'in', v => { a.invert = v === 'out'; commit(); updateLayersUI(); render(); }));
+    box.appendChild(lbl('GRUNDLAGE'));
+    box.appendChild(mkChips([['1', 'Auf dem Foto-Look'], ['0', 'Auf dem Original']], a.look.inherit ? '1' : '0', v => { a.look.inherit = v === '1'; commit(); render(); }));
+    const acts = el('div', 'tools compact');
+    acts.append(tbtn(a.hidden ? 'Einblenden' : 'Ausblenden', () => { toggleHidden(a.id); buildProps(a); }),
+                tbtn('Löschen', () => { removeItem(a.id); commit(); render(); }));
+    box.appendChild(acts);
+    return;
+  }
   // Bereiche (Weichzeichnung / gelöscht)
   if (!a.type) {
     const blur = isBlurRegion(a);
@@ -2817,7 +2911,7 @@ function syncProps(a) { if (!a || !propCtl.sz) return; propCtl.sz.set(s2v(a.s));
 // Ebenenliste: oben die vorderste Ebene; danach die Bereiche. Je Zeile: Sichtbarkeit, Name, Reihenfolge, Löschen.
 function buildLayerList() {
   const box = $('#layerList'); box.innerHTML = '';
-  const regions = [...S.blurs, ...S.holes];
+  const regions = [...S.adjs, ...S.blurs, ...S.holes];
   $('#layerListLabel').hidden = !(S.objs.length || regions.length);
   const row = (it, idx) => {
     const r = el('div', 'layer' + (it.id === activeId ? ' on' : '') + (it.hidden ? ' off' : ''));
@@ -2846,10 +2940,11 @@ function updateLayersUI(rebuild) {
   $('#actCut').disabled = $('#actCopy').disabled = !(a || sel);
   $('#actDelete').disabled = !(item || sel);
   $('#actBlur').disabled = !sel;
+  $('#actAdjust').disabled = !sel;
   $('#layerHint').textContent = tool !== 'move'
-    ? 'Ziehe im Bild, um einen Bereich auszuwählen – dann Ausschneiden, Kopieren, Weichzeichnen oder Löschen.'
+    ? 'Ziehe im Bild, um einen Bereich auszuwählen – dann „Einstellungen“ (wirkt direkt aufs Foto), Ausschneiden, Kopieren, Weichzeichnen oder Löschen.'
     : a ? 'Ziehen = verschieben · gelber Griff = drehen/skalieren · zwei Finger = zoomen/drehen'
-    : ar ? 'Ziehen = Bereich verschieben'
+    : ar ? (ar.type === 'adjust' ? 'Ziehen = Bereich verschieben · Einstellungen wirken direkt aufs Foto' : 'Ziehen = Bereich verschieben')
     : (S.objs.length || S.blurs.length || S.holes.length) ? 'Tippe im Bild oder in der Liste auf eine Ebene, um sie zu bearbeiten.'
     : 'Füge Text oder ein Bild hinzu – oder wähle mit Rechteck, Ellipse oder Lasso einen Bildbereich aus.';
   if (rebuild || propsFor !== (item ? item.id : null)) buildProps(item); else syncProps(a);
@@ -3100,7 +3195,7 @@ function svgString(res, outW, outH) {
    13. VERLAUF (Rückgängig / Wiederholen)
    ===================================================================== */
 let hist = [], fut = [], cur = null;
-const snap = () => JSON.stringify({ p: S.p, ts: S.ts, crop: S.crop, rot: S.rot, fh: S.fh, fv: S.fv, objs: S.objs, holes: S.holes, blurs: S.blurs, fx: S.fx });
+const snap = () => JSON.stringify({ p: S.p, ts: S.ts, crop: S.crop, rot: S.rot, fh: S.fh, fv: S.fv, objs: S.objs, holes: S.holes, blurs: S.blurs, adjs: S.adjs, fx: S.fx });
 function commit() {
   if (!base && !cam.on) return;
   const s = snap(); if (s === cur) return;
@@ -3110,9 +3205,9 @@ function commit() {
 function restore(s) {
   const o = JSON.parse(s), reb = o.rot !== S.rot || o.fh !== S.fh || o.fv !== S.fv;
   S.p = { ...DEFAULTS, ...o.p }; S.ts = o.ts; S.crop = o.crop; S.rot = o.rot; S.fh = o.fh; S.fv = o.fv;
-  S.objs = o.objs; S.holes = o.holes; S.blurs = o.blurs || []; S.fx = o.fx || 'none'; syncFx(); sel = null;
+  S.objs = o.objs; S.holes = o.holes; S.blurs = o.blurs || []; S.adjs = o.adjs || []; S.fx = o.fx || 'none'; syncFx(); sel = null;
   if (!findItem(activeId)) activeId = null;
-  if (target) { const o = S.objs.find(x => x.id === target); if (!o || !o.look) target = null; }
+  if (target) { const o = S.objs.find(x => x.id === target) || S.adjs.find(x => x.id === target); if (!o || !o.look) target = null; }
   syncTargetUI();
   if (reb && img) rebuildBase();
   syncSliders(); syncTsMode(); updateLayersUI(true); schedule(); updHist();
@@ -3159,7 +3254,7 @@ function useImage(im, url, name, keepLook) {
     img = im; imgUrl = url;
     fileName = (name || 'bild').replace(/\.[^.]+$/, '') || 'bild';
     if (!keepLook) { S.p = { ...DEFAULTS }; S.ts = { x: .5, y: .5, mode: 'linear' }; S.fx = 'none'; }
-    S.crop = { x: 0, y: 0, w: 1, h: 1 }; S.rot = 0; S.fh = S.fv = false; S.objs = []; S.holes = []; S.blurs = []; syncFx();
+    S.crop = { x: 0, y: 0, w: 1, h: 1 }; S.rot = 0; S.fh = S.fv = false; S.objs = []; S.holes = []; S.blurs = []; S.adjs = []; syncFx();
     assets.clear(); activeId = null; sel = null; clip = null; target = null; layerCache.clear(); syncTargetUI();
     vz.z = 1; vz.px = vz.py = 0;
     if (vecUrl) { URL.revokeObjectURL(vecUrl); vecUrl = null; vecSvg = null; $('#vecSave').disabled = true; }
@@ -3690,13 +3785,14 @@ async function renderExport() {
   // Ebenen mit eigenem Look in Export-Auflösung berechnen
   const layers = new Map();
   let orig = null;                                   // unbearbeitetes Foto (nur für Ausschnitte ohne Foto-Look)
-  for (const ob of S.objs) {
+  for (const ob of [...S.adjs, ...S.objs]) {
     if (ob.hidden || !hasLook(ob)) continue;
-    if (ob.type === 'cut' && !ob.look.inherit && !orig) {
+    if ((ob.type === 'cut' || ob.type === 'adjust') && !ob.look.inherit && !orig) {
       const oc = document.createElement('canvas'); oc.width = pw; oc.height = ph; oc.getContext('2d').putImageData(data, 0, 0);
       orig = { canvas: oc, bx, by, k };
     }
-    const r = processLayer(ob, K, proc, orig || proc);
+    const adj = ob.type === 'adjust';
+    const r = processLayer(ob, K, proc, orig || proc, adj ? [...S.adjs].filter(a => layers.has(a.id)).map(a => layers.get(a.id)) : null);
     if (r) layers.set(ob.id, r);
   }
   const OW = Math.max(1, Math.round(cw * f)), OH = Math.max(1, Math.round(ch * f));
