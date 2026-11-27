@@ -214,6 +214,9 @@ dialog{margin:auto;border:1px solid var(--line);border-radius:16px;background:va
 .muted{color:var(--muted)}
 #algoChips,#scaleChips{flex-wrap:wrap}
 dialog::backdrop{background:rgba(0,0,0,.6)}
+#asciiDlg{width:min(760px,calc(100vw - 20px));padding:16px}
+#asciiOut{display:block;width:100%;height:min(56dvh,480px);margin-top:10px;background:#050806;color:#5cff8a;border:1px solid var(--line);border-radius:10px;padding:8px;font:7px/1.08 ui-monospace,'Roboto Mono','Droid Sans Mono',Menlo,Consolas,monospace;white-space:pre;overflow:auto;resize:none}
+#asciiOut:focus{outline:none}
 dialog h2{font-size:17px;margin-bottom:14px}
 dialog .chips{margin-bottom:14px}
 .dlgbtns{display:flex;gap:8px;justify-content:flex-end;margin-top:16px;flex-wrap:wrap}
@@ -442,6 +445,17 @@ dialog .chips{margin-bottom:14px}
   <div class="dlgbtns">
     <button class="btn2" id="camDlgClose">Schließen</button>
     <button class="save" id="camDlgApp">Kamera-App verwenden</button>
+  </div>
+</dialog>
+
+<dialog id="asciiDlg">
+  <h2>ASCII als Text</h2>
+  <p class="dlgtext muted" id="asciiInfo"></p>
+  <textarea id="asciiOut" readonly spellcheck="false" wrap="off"></textarea>
+  <div class="dlgbtns">
+    <button class="btn2" id="asciiClose">Schließen</button>
+    <button class="btn2" id="asciiSave">Als .txt speichern</button>
+    <button class="save" id="asciiCopy">Kopieren</button>
   </div>
 </dialog>
 
@@ -2945,6 +2959,76 @@ function pickColorAt(pt) {
   TP().spHue = Math.round((h * 60 + 360) % 360);
   paintSlider('spHue'); schedule(); commit(); toast('Farbe übernommen');
 }
+// ASCII als Text: dieselben Zeichen wie der Effekt (gleiches Raster, gleiche Helligkeitsstufen)
+const ASCII_SETS = [' .:-=+*#%@', ' ░▒▓█', '01'];
+function hashCell(x, y) {                       // wie hash() im Shader → gleiche 0/1-Verteilung bei „Binär“
+  const qx = Math.imul(x + 32768, 1597334673) >>> 0, qy = Math.imul(y + 32768, 3812015801) >>> 0;
+  return (Math.imul(qx ^ qy, 1597334673) >>> 0) / 4294967295;
+}
+function asciiText() {
+  const P = TP(), bw = base.width, bh = base.height, c = S.crop;
+  const cx = c.x * bw, cy = c.y * bh, cw = c.w * bw, ch = c.h * bh, L = Math.min(cw, ch);
+  const chH = (0.012 + 0.038 * P.asSize / 100) * L + 4, chW = chH * 0.62;
+  const cols = Math.ceil(cw / chW), rows = Math.ceil(ch / chH), k = 4;
+  // Zuschnitt mit Licht-/Farbeinstellungen in kleiner Auflösung (k × k Pixel je Zeichen)
+  const dw = Math.max(1, Math.round(cw / chW * k)), dh = Math.max(1, Math.round(ch / chH * k));
+  const cv = document.createElement('canvas'); cv.width = dw; cv.height = dh;
+  const x = cv.getContext('2d', { willReadFrequently: true }); x.imageSmoothingQuality = 'high';
+  x.drawImage(base, cx, cy, cw, ch, 0, 0, dw, dh);
+  const src = x.getImageData(0, 0, dw, dh), out = x.createImageData(dw, dh);
+  process(src, dw, dh, P, null, out);
+  const d = out.data, chars = ASCII_SETS[P.asSet] || ASCII_SETS[0], con = 1 + P.asContrast / 100 * 3, lines = [];
+  for (let j = 0; j < rows; j++) {
+    let line = '';
+    for (let i = 0; i < cols; i++) {
+      let sum = 0;
+      for (let yy = j * k; yy < j * k + k; yy++) for (let xx = i * k; xx < i * k + k; xx++) {
+        const q = 4 * (Math.min(yy, dh - 1) * dw + Math.min(xx, dw - 1));
+        sum += 0.299 * d[q] + 0.587 * d[q + 1] + 0.114 * d[q + 2];
+      }
+      const l = clamp((sum / (k * k) / 255 - 0.5) * con + 0.5, 0, 1), dens = P.asColor === 2 ? 1 - l : l;
+      line += P.asSet === 2 ? (dens < 0.12 ? ' ' : hashCell(i, j + 5) < 0.5 ? '0' : '1') : chars[Math.round(dens * (chars.length - 1))];
+    }
+    lines.push(line.replace(/\s+$/, ''));
+  }
+  return { text: lines.join('\n'), cols, rows, paper: P.asColor === 2 };
+}
+async function copyText(t, ta) {
+  try { await navigator.clipboard.writeText(t); return true; }
+  catch (_) {                                   // Fallback (z. B. ohne HTTPS): markieren + kopieren
+    const tmp = ta || el('textarea');
+    if (!ta) { tmp.value = t; tmp.style.cssText = 'position:fixed;opacity:0;top:0'; document.body.appendChild(tmp); }
+    tmp.focus(); tmp.select();
+    let ok = false; try { ok = document.execCommand('copy'); } catch (_) {}
+    if (!ta) tmp.remove();
+    return ok;
+  }
+}
+let asciiLast = null;
+(() => {
+  const box = el('div', 'fxextra'), hint = el('div', 'hint', 'Zum Einfügen eine Schrift mit fester Breite verwenden. Für helle Hintergründe (Notizen, Mail) Farben „Papier“ wählen.');
+  box.append(
+    tbtn('Als Text kopieren', async () => {
+      if (!base) { toast('Erst ein Foto öffnen'); return; }
+      const r = asciiText();
+      toast(await copyText(r.text) ? `ASCII-Text kopiert (${r.cols} × ${r.rows} Zeichen)` : 'Kopieren nicht möglich – „Text anzeigen“ nutzen');
+    }),
+    tbtn('Text anzeigen', () => {
+      if (!base) { toast('Erst ein Foto öffnen'); return; }
+      const r = asciiLast = asciiText(), ta = $('#asciiOut');
+      ta.value = r.text;
+      ta.style.background = r.paper ? '#f5f3ec' : '#050806'; ta.style.color = r.paper ? '#1a1a20' : '#5cff8a';
+      $('#asciiInfo').textContent = `${r.cols} × ${r.rows} Zeichen · Größe über „Zeichengröße“ einstellen`;
+      $('#asciiDlg').showModal();
+      const fs = clamp((ta.clientWidth - 18) / (r.cols * 0.6), 3, 12);   // ganze Breite sichtbar
+      ta.style.fontSize = fs.toFixed(2) + 'px'; ta.scrollTop = 0; ta.scrollLeft = 0;
+      ta.style.height = Math.round(Math.min(innerHeight * 0.56, r.rows * fs * 1.08 + 20)) + 'px';
+    }));
+  const g = document.querySelector('#fxSliders [data-group="fx_ascii"]'); g.prepend(hint); g.prepend(box);
+  $('#asciiClose').onclick = () => $('#asciiDlg').close();
+  $('#asciiCopy').onclick = async () => { if (asciiLast) toast(await copyText(asciiLast.text, $('#asciiOut')) ? 'ASCII-Text kopiert' : 'Kopieren nicht möglich – Text markieren und kopieren'); };
+  $('#asciiSave').onclick = () => { if (asciiLast) downloadBlob(new Blob([asciiLast.text + '\n'], { type: 'text/plain;charset=utf-8' }), `${fileName}_ascii.txt`); };
+})();
 // Doppelbelichtung: zweites Foto wählen
 (() => {
   const inp = el('input'); inp.type = 'file'; inp.accept = 'image/*'; inp.hidden = true; document.body.appendChild(inp);
