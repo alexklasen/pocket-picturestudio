@@ -142,6 +142,9 @@ input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:30px
 .rng.drag input[type=range]::-webkit-slider-thumb{box-shadow:0 0 0 7px rgba(242,184,75,.3),0 1px 4px rgba(0,0,0,.5)}
 .rng.drag input[type=range]::-moz-range-thumb{box-shadow:0 0 0 7px rgba(242,184,75,.3),0 1px 4px rgba(0,0,0,.5)}
 input[type=range]:focus{outline:none}
+input[type=range].hue::-webkit-slider-runnable-track{background:linear-gradient(to right,#f33,#ff3,#3f3,#3ff,#33f,#f3f,#f33)}
+input[type=range].hue::-moz-range-track{background:linear-gradient(to right,#f33,#ff3,#3f3,#3ff,#33f,#f3f,#f33)}
+.fxextra{display:flex;flex-wrap:wrap;gap:8px;margin:2px 0 10px}
 input[type=range]::-webkit-slider-runnable-track{height:4px;border-radius:4px;
   background:linear-gradient(to right,var(--track) 0 var(--a),var(--accent) var(--a) var(--b),var(--track) var(--b) 100%)}
 input[type=range]::-moz-range-track{height:4px;border-radius:4px;
@@ -476,7 +479,22 @@ const GROUPS = {
   fx_duo:     [['dShadow','Farbe Schatten',0,360],['dLight','Farbe Lichter',0,360],['dContrast','Kontrast',0,100],['dMix','Original',0,100]],
   fx_thermal: [['tContrast','Kontrast',0,100],['tShift','Temperatur',-100,100],['tSmooth','Glättung',0,100],['tRainbow','Regenbogen',0,100]],
   fx_kaleido: [['kSeg','Segmente',3,16],['kRot','Drehung',0,360],['kZoom','Zoom',0,100],['kTwist','Verwirbelung',-100,100]],
-  fx_planet:  [['plZoom','Zoom',0,100],['plRot','Drehung',0,360],['plCurve','Krümmung',0,100],['plSeam','Naht glätten',0,100]]
+  fx_planet:  [['plZoom','Zoom',0,100],['plRot','Drehung',0,360],['plCurve','Krümmung',0,100],['plSeam','Naht glätten',0,100]],
+  // 5. Eintrag = Auswahl-Chips statt Regler (Wert = Index)
+  fx_splash:  [['spHue','Farbe',0,360],['spRange','Farbbereich',0,100],['spSoft','Weichheit',0,100],['spRest','Restfarbe',0,100]],
+  fx_sort:    [['psLo','Schwelle dunkel',0,100],['psHi','Schwelle hell',0,100],['psLen','Länge',0,100],['psAngle','Richtung',0,360],['psRand','Zufall',0,100]],
+  fx_lowpoly: [['lpSize','Dreiecksgröße',0,100],['lpJitter','Unregelmäßigkeit',0,100],['lpShade','Facetten-Licht',0,100],['lpEdge','Kanten',0,100]],
+  fx_crystal: [['crSize','Zellgröße',0,100],['crEdge','Fugen',0,100],['crShade','Facetten-Licht',0,100],['crJitter','Unregelmäßigkeit',0,100]],
+  fx_glass:   [['sgSize','Scheibengröße',0,100],['sgLead','Bleistege',0,100],['sgColor','Leuchtkraft',0,100],['sgLight','Lichteinfall',0,100]],
+  fx_water:   [['wcBrush','Pinsel',0,100],['wcBleed','Verlaufen',0,100],['wcEdge','Farbränder',0,100],['wcGrain','Pigmentkörnung',0,100],['wcPaper','Papier',0,100]],
+  fx_riso:    [['rsInks','Druckfarben',0,5,['Pink + Blau','Rot + Blau + Gelb','Grün + Pink','Orange + Blau','Lila + Gelb','Schwarz + Rot']],
+               ['rsMode','Druckart',0,2,['Risograph','Raster','Siebdruck']],['rsSize','Körnung / Raster',0,100],['rsShift','Versatz',0,100],['rsPaper','Papier',0,100]],
+  fx_double:  [['dbMix','Mischung',0,100],['dbMode','Modus',0,2,['Aufhellen','Silhouette','Multiplizieren']],['dbScale','Größe',0,100],['dbX','Position links/rechts',-100,100],['dbY','Position oben/unten',-100,100]],
+  fx_leak:    [['lkAmt','Stärke',0,100],['lkHue','Farbe',0,360],['lkSize','Größe',0,100],['lkSeed','Variante',0,100],['lkFade','Verblassen',0,100]],
+  fx_bokeh:   [['bkSize','Unschärfe',0,100],['bkGlow','Lichtpunkte',0,100],['bkFocus','Scharfe Mitte',0,100],['bkShape','Form',0,2,['Kreis','Sechseck','Herz']]],
+  fx_chroma:  [['caAmt','Stärke',0,100],['caMode','Richtung',0,1,['Zum Rand hin','Seitlich']],['caBlur','Rand-Unschärfe',0,100],['caFringe','Lila Säume',0,100]],
+  fx_anaglyph:[['agShift','Versatz',0,100],['agDepth','Tiefe',0,100],['agColor','Farbe',0,100],['agFocus','Fokusebene',0,100]],
+  fx_ascii:   [['asSize','Zeichengröße',0,100],['asContrast','Kontrast',0,100],['asColor','Farben',0,3,['Terminal','Farbig','Papier','Weiß auf Schwarz']],['asSet','Zeichen',0,2,['Klassisch','Blöcke','Binär']]]
 };
 const KEYS = Object.values(GROUPS).flat().map(x => x[0]);
 const DEFAULTS = Object.fromEntries(KEYS.map(k => [k, 0]));
@@ -485,10 +503,19 @@ Object.assign(DEFAULTS, { inkWidth: 30, tsSize: 25, tsFeather: 40, comicSmooth: 
   gAmt: 50, gRgb: 40, gBlocks: 40, gScan: 30, vBleed: 50, vTrack: 40, vNoise: 30, vWave: 30,
   pxSize: 35, oBrush: 50, oDetail: 50, oCanvas: 30, oPop: 20, pcHatch: 50, pcEdge: 50, pcPaper: 40,
   nGlow: 60, nWidth: 40, nBg: 10, dShadow: 240, dLight: 40, dContrast: 30, tContrast: 40, tSmooth: 30,
-  kSeg: 6, kZoom: 30, plZoom: 50, plCurve: 50, plSeam: 40 });
+  kSeg: 6, kZoom: 30, plZoom: 50, plCurve: 50, plSeam: 40,
+  spRange: 30, spSoft: 40, psLo: 25, psHi: 85, psLen: 45, psAngle: 90, psRand: 40, lpSize: 40, lpJitter: 80, lpShade: 40,
+  crSize: 35, crEdge: 25, crShade: 35, crJitter: 80, sgSize: 40, sgLead: 45, sgColor: 55, sgLight: 50,
+  wcBrush: 45, wcBleed: 50, wcEdge: 50, wcGrain: 40, wcPaper: 50, rsSize: 35, rsShift: 35, rsPaper: 50,
+  dbMix: 60, dbScale: 50, lkAmt: 60, lkHue: 25, lkSize: 50, lkFade: 25, bkSize: 45, bkGlow: 60, bkFocus: 30,
+  caAmt: 45, caBlur: 30, agShift: 55, agDepth: 50, agColor: 60, agFocus: 50, asSize: 25, asContrast: 20 });
 const FX = [['none','Ohne'],['glitch','Glitch'],['vhs','VHS'],['pixel','Pixel'],['oil','Ölgemälde'],['pencil','Bleistift'],['neon','Neon'],
-            ['duo','Duoton'],['thermal','Wärmebild'],['kaleido','Kaleidoskop'],['planet','Mini-Planet'],['tunnel','Tunnel']];
-const FX_ID = { none: 0, glitch: 1, vhs: 2, pixel: 3, oil: 4, pencil: 5, neon: 6, duo: 7, thermal: 8, kaleido: 9, planet: 10, tunnel: 11 };
+            ['duo','Duoton'],['thermal','Wärmebild'],['kaleido','Kaleidoskop'],['planet','Mini-Planet'],['tunnel','Tunnel'],
+            ['splash','Color Splash'],['sort','Pixel-Sort'],['water','Aquarell'],['riso','Risograph'],['lowpoly','Low-Poly'],['crystal','Kristall'],
+            ['glass','Buntglas'],['double','Doppelbelichtung'],['leak','Lichtlecks'],['bokeh','Bokeh'],['chroma','Farbsäume'],['anaglyph','Anaglyph 3D'],['ascii','ASCII']];
+const FX_ID = { none: 0, glitch: 1, vhs: 2, pixel: 3, oil: 4, pencil: 5, neon: 6, duo: 7, thermal: 8, kaleido: 9, planet: 10, tunnel: 11,
+  splash: 12, sort: 13, lowpoly: 14, crystal: 15, glass: 16, water: 17, riso: 18, double: 19, leak: 20, bokeh: 21, chroma: 22, anaglyph: 23, ascii: 24 };
+const HUE_KEYS = new Set(['dShadow', 'dLight', 'spHue', 'lkHue']);   // Regler mit Farbverlauf
 const FX_GROUP = t => t === 'tunnel' ? 'fx_planet' : 'fx_' + t;
 function fxParams(p, t) {                      // Regler des Effekts → 0..1 für den Shader
   const v = (GROUPS[FX_GROUP(t)] || []).map(([k, , mn, mx]) => (p[k] - mn) / (mx - mn));
@@ -497,7 +524,7 @@ function fxParams(p, t) {                      // Regler des Effekts → 0..1 f�
 }
 const REGION_BLUR_DEFAULT = 60;   // Startstärke für weichgezeichnete Bereiche
 const FILTER_KEYS = [...GROUPS.light, ...GROUPS.color, ...GROUPS.detail, ...GROUPS.comic].map(x => x[0]).concat('glow');
-const UNITS = { hue: '°', tsAngle: '°', motionAngle: '°', dotAngle: '°', hatchAngle: '°', dShadow: '°', dLight: '°', kRot: '°', plRot: '°' };
+const UNITS = { hue: '°', tsAngle: '°', motionAngle: '°', dotAngle: '°', hatchAngle: '°', dShadow: '°', dLight: '°', kRot: '°', plRot: '°', spHue: '°', lkHue: '°', psAngle: '°' };
 const FILTERS = [
   ['Original', {}],
   ['Lebendig', {contrast:15, saturation:18, vibrance:35, structure:15}],
@@ -546,7 +573,7 @@ let img = null, fileName = 'bild', imgUrl = null;
 let base = null, baseData = null, detCache = null, detRG = null, R2 = 8;
 const processed = document.createElement('canvas');
 const baseOut = document.createElement('canvas');   // Ergebnis der GPU-Vorschau des Fotos (GL.c wird auch für Ebenen genutzt)
-let baseKey = '', baseVer = 0;
+let baseKey = '', baseVer = 0, fx2Ver = 0;   // fx2Ver: zweites Foto der Doppelbelichtung geändert
 let pctx = null, outData = null;
 let tab = 'adjust', cropMode = false, aspect = 'free', showOrig = false;
 const split = { on: false, x: 0.5 };           // Vorher/Nachher-Teilung (x relativ zur sichtbaren Bildbreite)
@@ -1038,6 +1065,379 @@ void main() {
   }
   o = vec4(clamp(col, 0.0, 1.0), al);
 }`;
+const FRAG_FX2 = `#version 300 es
+precision highp float;
+uniform sampler2D uTex, uTex2, uGlyph;
+uniform vec2 uSize, uSize2;   // Bildgröße; Größe des zweiten Fotos (Doppelbelichtung)
+uniform vec4 uCrop;           // Zuschnitt in Bildpixeln (x, y, w, h), y nach unten
+uniform vec4 uP;              // Effekt-Parameter 1–4 (0..1)
+uniform vec2 uQ;              // Parameter 5, Zufallswert
+uniform float uScale;
+uniform int uFx, uHas2;
+out vec4 o;
+const float TAU = 6.28318531;
+float lum(vec3 c) { return dot(c, vec3(0.299, 0.587, 0.114)); }
+vec3 samp(vec2 p, float lod) { return textureLod(uTex, vec2(p.x, uSize.y - p.y) / uSize, lod).rgb; }
+float sampA(vec2 p, float lod) { return textureLod(uTex, vec2(p.x, uSize.y - p.y) / uSize, lod).a; }
+float hash(vec2 p) {
+  uvec2 q = uvec2(ivec2(floor(p)) + 32768) * uvec2(1597334673u, 3812015801u);
+  uint n = (q.x ^ q.y) * 1597334673u;
+  return float(n) / 4294967295.0;
+}
+vec2 hash2(vec2 p) { return vec2(hash(p), hash(p + vec2(17.0, 59.0))); }
+float vnoise(vec2 p) {
+  vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), f.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), f.x), f.y);
+}
+float fbm(vec2 p) { float s = 0.0, a = 0.5; for (int i = 0; i < 4; i++) { s += a * vnoise(p); p = p * 2.03 + 17.0; a *= 0.5; } return s / 0.9375; }
+vec3 hsv2rgb(vec3 c) { vec3 p = abs(fract(c.xxx + vec3(0.0, 2.0/3.0, 1.0/3.0)) * 6.0 - 3.0); return c.z * mix(vec3(1.0), clamp(p - 1.0, 0.0, 1.0), c.y); }
+vec3 rgb2hsv(vec3 c) {
+  vec4 K = vec4(0.0, -1.0/3.0, 2.0/3.0, -1.0);
+  vec4 p = mix(vec4(c.bg, K.wz), vec4(c.gb, K.xy), step(c.b, c.g));
+  vec4 q = mix(vec4(p.xyw, c.r), vec4(c.r, p.yzx), step(p.x, c.r));
+  float d = q.x - min(q.w, q.y);
+  return vec3(abs(q.z + (q.w - q.y) / (6.0 * d + 1e-10)), d / (q.x + 1e-10), q.x);
+}
+float sobel(vec2 p, float w, float lod) {
+  float tl = lum(samp(p + vec2(-w, -w), lod)), tc = lum(samp(p + vec2(0.0, -w), lod)), tr = lum(samp(p + vec2(w, -w), lod));
+  float ml = lum(samp(p + vec2(-w, 0.0), lod)), mr = lum(samp(p + vec2(w, 0.0), lod));
+  float bl = lum(samp(p + vec2(-w, w), lod)), bc = lum(samp(p + vec2(0.0, w), lod)), br = lum(samp(p + vec2(w, w), lod));
+  return length(vec2((tr + 2.0*mr + br) - (tl + 2.0*ml + bl), (bl + 2.0*bc + br) - (tl + 2.0*tc + tr)));
+}
+vec2 mirrorCrop(vec2 q) { vec2 u = (q - uCrop.xy) / uCrop.zw; u = 1.0 - abs(1.0 - mod(u, 2.0)); return uCrop.xy + u * uCrop.zw; }
+// Pixel-Sort: liegt der Punkt im sortierbaren Helligkeitsbereich (und im Zuschnitt)?
+bool inSort(vec2 q, float lo, float hi) {
+  if (q.x < uCrop.x || q.y < uCrop.y || q.x >= uCrop.x + uCrop.z || q.y >= uCrop.y + uCrop.w) return false;
+  float l = lum(samp(q, 0.0));
+  return l >= lo && l <= hi;
+}
+// Risograph: Farbdichten zweier Druckfarben (subtraktiv, im Logarithmus linear), nicht negativ
+vec2 solve2(vec3 A, vec3 B, vec3 D) {
+  float m00 = dot(A, A), m01 = dot(A, B), m11 = dot(B, B), r0 = dot(A, D), r1 = dot(B, D);
+  float det = max(m00 * m11 - m01 * m01, 1e-5);
+  vec2 d = vec2(r0 * m11 - r1 * m01, m00 * r1 - m01 * r0) / det;
+  if (d.x < 0.0) d = vec2(0.0, r1 / m11);
+  if (d.y < 0.0) d = vec2(r0 / m00, 0.0);
+  return d;
+}
+vec3 inkDens(vec3 cc, vec3 i0, vec3 i1, vec3 i2, int n) {
+  vec3 D = -log(clamp(cc, 0.05, 1.0));
+  vec3 A0 = -log(clamp(i0, 0.12, 1.0)), A1 = -log(clamp(i1, 0.12, 1.0)), A2 = -log(clamp(i2, 0.12, 1.0));
+  if (n == 2) return clamp(vec3(solve2(A0, A1, D), 0.0), 0.0, 1.0);
+  vec3 d = inverse(mat3(A0, A1, A2)) * D;
+  if (d.x < 0.0) d = vec3(0.0, solve2(A1, A2, D));
+  else if (d.y < 0.0) { vec2 s = solve2(A0, A2, D); d = vec3(s.x, 0.0, s.y); }
+  else if (d.z < 0.0) d = vec3(solve2(A0, A1, D), 0.0);
+  return clamp(d, 0.0, 1.0);
+}
+void main() {
+  vec2 fc = gl_FragCoord.xy;
+  vec4 src = texelFetch(uTex, ivec2(fc), 0);
+  vec3 col = src.rgb;
+  float al = src.a;
+  vec2 p = vec2(fc.x, uSize.y - fc.y), rel = p - uCrop.xy;
+  float L = min(uCrop.z, uCrop.w), S = max(1.0, uScale);
+  vec2 C = uCrop.xy + uCrop.zw * 0.5;
+  float a = uP.x, b = uP.y, c = uP.z, d = uP.w, e = uQ.x, seed = floor(uQ.y * 97.0);
+
+  if (uFx == 12) {                         // COLOR SPLASH: nur die gewählte Farbe bleibt
+    vec3 hsv = rgb2hsv(col);
+    float dh = abs(fract(hsv.x - a + 0.5) - 0.5);
+    float wdt = mix(0.015, 0.2, b), sft = mix(0.004, 0.12, c);
+    float w = (1.0 - smoothstep(wdt, wdt + sft, dh)) * smoothstep(0.05, 0.12 + 0.15 * c, hsv.y) * smoothstep(0.02, 0.1, hsv.z);
+    float g = lum(col);
+    vec3 keep = clamp(mix(vec3(g), col, 1.15), 0.0, 1.0);
+    col = mix(vec3(g), keep, max(w, d));
+  }
+  else if (uFx == 13) {                    // PIXEL-SORT: Pixelreihen innerhalb eines Helligkeitsbereichs sortieren
+    float lo = a, hi = max(b, a + 0.01);
+    if (inSort(p, lo, hi)) {
+      float ang = d * TAU;
+      vec2 dir = vec2(cos(ang), sin(ang)), nrm = vec2(-dir.y, dir.x);
+      float line = floor(dot(p - C, nrm) / S + 0.5);
+      float t = dot(p - C, dir);
+      vec2 o0 = p - dir * t;
+      float maxLen = mix(0.03, 0.7, c * c) * L + 4.0 * S;
+      float segLen = maxLen * mix(1.0, 0.12 + 0.88 * hash(vec2(line, seed + 3.0)), e);
+      float off = hash(vec2(line, seed + 11.0)) * segLen;
+      float s0 = floor((t + off) / segLen) * segLen - off, s1 = s0 + segLen;
+      // Anfang der Strecke: grob suchen, dann fein eingrenzen
+      float inn = t, outp = s0, ta = s0, tb = s1;
+      bool hit = false;
+      float st = (t - s0) / 24.0;
+      for (int i = 1; i <= 24; i++) { float tt = t - st * float(i); if (!inSort(o0 + dir * tt, lo, hi)) { outp = tt; hit = true; break; } inn = tt; }
+      if (hit) { for (int i = 0; i < 6; i++) { float m = 0.5 * (inn + outp); if (inSort(o0 + dir * m, lo, hi)) inn = m; else outp = m; } ta = inn; }
+      inn = t; outp = s1; hit = false; st = (s1 - t) / 24.0;
+      for (int i = 1; i <= 24; i++) { float tt = t + st * float(i); if (!inSort(o0 + dir * tt, lo, hi)) { outp = tt; hit = true; break; } inn = tt; }
+      if (hit) { for (int i = 0; i < 6; i++) { float m = 0.5 * (inn + outp); if (inSort(o0 + dir * m, lo, hi)) inn = m; else outp = m; } tb = inn; }
+      float Ls = tb - ta;
+      if (Ls > 2.0 * S) {
+        float u = clamp((t - ta) / Ls, 0.0, 1.0);
+        vec3 cs[14]; float ls[14];
+        for (int j = 0; j < 14; j++) { cs[j] = samp(o0 + dir * (ta + (float(j) + 0.5) / 14.0 * Ls), 0.0); ls[j] = lum(cs[j]); }
+        float R = u * 14.0 - 0.5, R0 = clamp(floor(R), 0.0, 13.0), fr = clamp(R - R0, 0.0, 1.0), R1 = min(R0 + 1.0, 13.0);
+        vec3 c0 = cs[0], c1 = cs[0];
+        for (int j = 0; j < 14; j++) {
+          float r = 0.0;
+          for (int m = 0; m < 14; m++) r += (ls[m] < ls[j] || (ls[m] == ls[j] && m < j)) ? 1.0 : 0.0;
+          if (r == R0) c0 = cs[j];
+          if (r == R1) c1 = cs[j];
+        }
+        col = mix(c0, c1, fr);
+      }
+    }
+  }
+  else if (uFx == 14) {                    // LOW-POLY: Dreiecksnetz mit Facetten-Licht
+    float s = mix(0.012, 0.1, a * a) * L + 2.0;
+    vec2 g = rel / s, gi = floor(g);
+    float jit = b * 0.45;
+    vec2 V[16];
+    for (int j = 0; j < 4; j++) for (int i = 0; i < 4; i++) {
+      vec2 id = gi + vec2(float(i) - 1.0, float(j) - 1.0);
+      V[j * 4 + i] = id + (hash2(id + seed) - 0.5) * 2.0 * jit;
+    }
+    vec2 A0 = V[5], B0 = V[6], C0 = V[9];
+    float best = -1e9;
+    for (int j = 0; j < 3; j++) for (int i = 0; i < 3; i++) {
+      vec2 v00 = V[j * 4 + i], v10 = V[j * 4 + i + 1], v01 = V[j * 4 + i + 4], v11 = V[j * 4 + i + 5];
+      bool diag = hash(gi + vec2(float(i) - 1.0, float(j) - 1.0) + vec2(91.0, 7.0)) < 0.5;
+      for (int k = 0; k < 2; k++) {
+        vec2 t0 = diag ? v00 : (k == 0 ? v00 : v10);
+        vec2 t1 = diag ? (k == 0 ? v10 : v11) : (k == 0 ? v10 : v11);
+        vec2 t2 = diag ? (k == 0 ? v11 : v01) : v01;
+        vec2 e0 = t1 - t0, e1 = t2 - t0, q = g - t0;
+        float den = e0.x * e1.y - e1.x * e0.y;
+        float w1 = (q.x * e1.y - e1.x * q.y) / den, w2 = (e0.x * q.y - q.x * e0.y) / den;
+        float mn = min(1.0 - w1 - w2, min(w1, w2));
+        if (mn > best) { best = mn; A0 = t0; B0 = t1; C0 = t2; }
+      }
+    }
+    vec2 ctr = (A0 + B0 + C0) / 3.0;
+    float lod = max(0.0, log2(s * 0.3));
+    vec3 cc = (samp(uCrop.xy + ctr * s, lod) * 2.0 + samp(uCrop.xy + (ctr + A0) * 0.5 * s, lod)
+             + samp(uCrop.xy + (ctr + B0) * 0.5 * s, lod) + samp(uCrop.xy + (ctr + C0) * 0.5 * s, lod)) / 5.0;
+    float la = lum(samp(uCrop.xy + A0 * s, lod + 1.0)), lb = lum(samp(uCrop.xy + B0 * s, lod + 1.0)), lc = lum(samp(uCrop.xy + C0 * s, lod + 1.0));
+    vec3 n = normalize(cross(vec3(B0 - A0, (lb - la) * 2.5), vec3(C0 - A0, (lc - la) * 2.5)));
+    if (n.z < 0.0) n = -n;
+    vec3 ld = normalize(vec3(-0.5, -0.6, 0.75));
+    col = cc * (1.0 + c * (dot(n, ld) - ld.z) * 2.2);
+    float ew = d * 1.5 * S + 0.5;
+    col = mix(col, col * 0.45, d * (1.0 - smoothstep(ew, ew + S, best * s * 0.7)));
+  }
+  else if (uFx == 15 || uFx == 16) {       // KRISTALL / BUNTGLAS: Voronoi-Zellen
+    bool glass = uFx == 16;
+    float s = glass ? mix(0.03, 0.14, a) * L + 4.0 : mix(0.012, 0.09, a * a) * L + 2.0;
+    float jit = glass ? 0.85 : d * 0.9 + 0.05;
+    vec2 g = rel / s, gi = floor(g), f = g - gi;
+    vec2 mr = vec2(0.0), mg = vec2(0.0);
+    float md = 8.0;
+    for (int j = -1; j <= 1; j++) for (int i = -1; i <= 1; i++) {
+      vec2 o2 = vec2(float(i), float(j));
+      vec2 r = o2 + 0.5 + (hash2(gi + o2 + seed) - 0.5) * jit - f;
+      float dd = dot(r, r);
+      if (dd < md) { md = dd; mr = r; mg = o2; }
+    }
+    float bd = 8.0;
+    for (int j = -2; j <= 2; j++) for (int i = -2; i <= 2; i++) {
+      vec2 o2 = mg + vec2(float(i), float(j));
+      vec2 r = o2 + 0.5 + (hash2(gi + o2 + seed) - 0.5) * jit - f;
+      vec2 dv = r - mr;
+      if (dot(dv, dv) > 1e-5) bd = min(bd, dot(0.5 * (mr + r), normalize(dv)));
+    }
+    vec3 cc = samp(p + mr * s, max(0.0, log2(s * 0.3)));
+    float bpx = bd * s;
+    if (!glass) {
+      vec2 dv = -mr;
+      float facet = dot(normalize(dv + 1e-4), normalize(vec2(-0.6, -0.8))) * clamp(length(dv) * 1.6, 0.0, 1.0);
+      col = cc * (1.0 + c * 0.45 * facet);
+      float lw = b * 0.05 * s + b * 0.8 * S;
+      col = mix(col, col * 0.3, step(0.001, b) * (1.0 - smoothstep(lw, lw + 1.2 * S, bpx)));
+    } else {
+      vec3 hsv = rgb2hsv(cc);
+      hsv.y = clamp(hsv.y * (1.0 + c * 1.6) + c * 0.2, 0.0, 1.0);
+      hsv.z = clamp(0.3 + hsv.z * 0.8, 0.0, 1.0);
+      vec3 gc = hsv2rgb(hsv);
+      float inner = 1.0 - clamp(length(mr) * 1.2, 0.0, 1.0);
+      float tex = fbm(p / (s * 0.22) + seed);
+      gc *= mix(1.0, 0.7 + 0.45 * inner + 0.35 * (0.5 - rel.y / uCrop.w), d) * (0.86 + 0.28 * tex);
+      gc += d * 0.12 * inner * inner;
+      float lw = mix(0.002, 0.014, b) * L + S;
+      float lead = 1.0 - smoothstep(lw, lw + 1.5 * S, bpx);
+      float hl = 1.0 - clamp(abs(bpx - lw * 0.45) / (lw * 0.45 + 0.5), 0.0, 1.0);
+      col = mix(gc, vec3(0.09, 0.09, 0.1) + 0.2 * hl, lead);
+    }
+  }
+  else if (uFx == 17) {                    // AQUARELL: verlaufene Farbe, dunkle Ränder, Pigmentkörnung, Papier
+    float rad = mix(0.002, 0.014, a) * L + S;
+    vec2 w = vec2(fbm(p / (L * 0.035) + seed), fbm(p / (L * 0.035) + seed + 41.0)) - 0.5;
+    vec2 q = p + w * b * 0.025 * L;
+    float lod = max(0.0, log2(rad));
+    vec3 c1 = samp(q, lod), c2 = samp(q, lod + 1.6);
+    vec3 wash = mix(c1, c2, 0.35);
+    wash = clamp(mix(vec3(lum(wash)), wash, 1.3), 0.0, 1.0);
+    float edge = clamp(abs(lum(c1) - lum(c2)) * 4.0, 0.0, 1.0);
+    float rim = smoothstep(0.1, 0.5, sobel(q, rad * 1.2, lod + 0.5));
+    vec3 paper = mix(vec3(1.0), vec3(0.985, 0.97, 0.935), e);
+    vec3 ink = (1.0 - wash) * 0.78;                  // lasierend: heller als das Foto
+    ink *= 0.8 + 0.4 * fbm(p / (L * 0.08) + seed + 7.0);
+    ink *= 1.0 + c * (rim * 0.5 + edge * 0.4);
+    float gr = vnoise(p / (1.6 * S)) * 0.6 + vnoise(p / (4.0 * S)) * 0.4;
+    ink *= 1.0 + d * 0.9 * (gr - 0.5);
+    vec3 outc = paper * (1.0 - clamp(ink, 0.0, 1.0));
+    outc *= 1.0 - e * 0.16 * (fbm(p / (2.5 * S) + 3.0) - 0.5);
+    col = mix(outc, paper, smoothstep(0.84, 0.97, lum(wash)) * 0.7);
+  }
+  else if (uFx == 18) {                    // RISOGRAPH / SIEBDRUCK: 2–3 Druckfarben, Körnung/Raster, Versatz
+    int pal = int(floor(a * 5.0 + 0.5)), mode = int(floor(b * 2.0 + 0.5)), n = 2;
+    vec3 pink = vec3(1.0, 0.28, 0.69), blue = vec3(0.0, 0.47, 0.75), red = vec3(0.945, 0.31, 0.37), yel = vec3(1.0, 0.91, 0.0);
+    vec3 i0 = pink, i1 = blue, i2 = vec3(1.0);
+    if (pal == 1) { i0 = red; i1 = blue; i2 = yel; n = 3; }
+    else if (pal == 2) { i0 = vec3(0.0, 0.66, 0.36); i1 = pink; }
+    else if (pal == 3) { i0 = vec3(1.0, 0.42, 0.18); i1 = vec3(0.24, 0.33, 0.53); }
+    else if (pal == 4) { i0 = vec3(0.46, 0.36, 0.65); i1 = yel; }
+    else if (pal == 5) { i0 = vec3(0.15, 0.15, 0.16); i1 = red; }
+    vec3 outc = mix(vec3(1.0), vec3(0.975, 0.96, 0.92), e) * (1.0 - e * 0.06 * vnoise(p / (1.2 * S)));
+    float sh = d * 0.007 * L, l0 = max(0.0, log2(S));
+    for (int i = 0; i < 3; i++) {
+      if (i >= n) break;
+      vec2 q = p + sh * (i == 0 ? vec2(0.7, -0.4) : i == 1 ? vec2(-0.6, 0.5) : vec2(0.1, 0.8));
+      vec3 cc = clamp((samp(q, l0 + (mode == 2 ? 1.8 : 0.3)) - 0.5) * 1.15 + 0.5, 0.0, 1.0);
+      vec3 dd = inkDens(cc, i0, i1, i2, n);
+      float di = i == 0 ? dd.x : i == 1 ? dd.y : dd.z;
+      vec3 ink = i == 0 ? i0 : i == 1 ? i1 : i2;
+      float cov;
+      if (mode == 0) {
+        float cs = mix(1.0, 3.5, c) * S;
+        float nz = 0.6 * hash(floor(q / cs) + vec2(float(i) * 37.0, seed)) + 0.4 * vnoise(q / (cs * 2.5) + float(i) * 13.0);
+        cov = smoothstep(nz - 0.08, nz + 0.08, di);
+      } else if (mode == 1) {
+        float an = (i == 0 ? 15.0 : i == 1 ? 75.0 : 45.0) * 0.0174533;
+        float cs = mix(0.004, 0.022, c) * L + 2.0 * S;
+        vec2 rq = mat2(cos(an), -sin(an), sin(an), cos(an)) * q / cs;
+        float dist = length(fract(rq) - 0.5), rr = sqrt(di) * 0.62, aa = 0.9 * S / cs;
+        cov = 1.0 - smoothstep(rr - aa, rr + aa, dist);
+      } else {
+        cov = smoothstep(0.26, 0.32, di) * 0.55 + smoothstep(0.6, 0.66, di) * 0.45;
+      }
+      outc *= mix(vec3(1.0), ink, cov * (0.9 + 0.1 * vnoise(q / (3.0 * S) + float(i) * 7.0)));
+    }
+    col = outc;
+  }
+  else if (uFx == 19) {                    // DOPPELBELICHTUNG: zweites Foto (oder das Bild gespiegelt) einblenden
+    int mode = int(floor(b * 2.0 + 0.5));
+    float z = exp2((c - 0.5) * 2.0);
+    vec2 offs = vec2(d - 0.5, e - 0.5);
+    vec3 s2;
+    if (uHas2 == 1) {
+      vec2 u = rel / uCrop.zw - 0.5;
+      float ca = uCrop.z / uCrop.w, ia = uSize2.x / uSize2.y, fx = 1.0 / (uCrop.z * z);
+      if (ia > ca) { u.x *= ca / ia; fx *= ca / ia; } else u.y *= ia / ca;
+      u = u / z + 0.5 - offs;
+      u = 1.0 - abs(1.0 - mod(u, 2.0));
+      s2 = textureLod(uTex2, u, log2(max(uSize2.x * fx, 1e-3))).rgb;
+    } else {
+      vec2 v = (p - C) / (z * 1.4);
+      s2 = samp(mirrorCrop(C + vec2(-v.x, v.y) - offs * uCrop.zw), max(0.0, log2(S)));
+      s2 = mix(vec3(lum(s2)), s2, 0.7);
+    }
+    vec3 m = col, scr = 1.0 - (1.0 - m) * (1.0 - s2), r;
+    float lm = lum(m);
+    if (mode == 0) r = scr;
+    else if (mode == 1) {
+      float w = 1.0 - smoothstep(0.4, 0.88, lm);
+      vec3 bg = mix(m, vec3(1.0), smoothstep(0.6, 0.95, lm) * 0.6);
+      r = mix(bg, scr, w);
+    }
+    else r = clamp(m * s2 * 1.25, 0.0, 1.0);
+    col = mix(m, r, a);
+  }
+  else if (uFx == 20) {                    // LICHTLECKS: warme Lichtflecken vom Rand + verblasster Film
+    vec2 u = rel / uCrop.zw;
+    float asp = uCrop.z / uCrop.w, sd = floor(d * 20.0);
+    vec3 leak = vec3(0.0);
+    for (int i = 0; i < 3; i++) {
+      float fi = float(i);
+      vec2 cp = i < 2 ? vec2(hash(vec2(sd, fi * 3.0 + 1.0)) < 0.5 ? -0.08 : 1.08, 0.1 + 0.8 * hash(vec2(sd, fi * 3.0 + 2.0)))
+                      : vec2(0.2 + 0.6 * hash(vec2(sd, 9.0)), hash(vec2(sd, 10.0)) < 0.5 ? -0.1 : 1.1);
+      float rad = mix(0.25, 0.8, c) * (0.6 + 0.6 * hash(vec2(sd, fi * 3.0 + 3.0)));
+      vec2 dv = (u - cp) * vec2(asp, 1.0);
+      if (i < 2) dv.y *= 0.5; else dv.x *= 0.5;
+      float inten = exp(-dot(dv, dv) / (rad * rad));
+      vec3 lc = hsv2rgb(vec3(fract(b + (hash(vec2(sd, fi + 20.0)) - 0.5) * 0.12 + fi * 0.04), 0.85, 1.0));
+      leak += lc * inten * (i == 2 ? 0.7 : 1.0);
+    }
+    leak += hsv2rgb(vec3(fract(b + 0.05), 0.55, 1.0)) * 0.3 * c * exp(-pow((u.x - 0.15 - 0.7 * hash(vec2(sd, 30.0))) * 6.0, 2.0));
+    col = 1.0 - (1.0 - col) * (1.0 - clamp(leak * a * 1.4, 0.0, 1.0));
+    col = mix(col, col * vec3(0.9, 0.88, 0.85) + vec3(0.09, 0.07, 0.06), e);
+  }
+  else if (uFx == 21) {                    // BOKEH: Objektiv-Unschärfe mit leuchtenden Lichtpunkten
+    int shape = int(floor(d * 2.0 + 0.5));
+    vec2 v = (p - C) / (L * 0.5);
+    float k = c > 0.0 ? smoothstep(c * 0.9, c * 0.9 + 0.45, length(v)) : 1.0;
+    float r = mix(0.004, 0.05, a) * L * k;
+    if (r > 0.75) {
+      float lod = max(0.0, log2(r * 0.36));         // Vorfilter passend zum Abstand der Abtastpunkte → gefüllte Scheiben
+      float bgL = lum(samp(p, log2(r) + 1.5));       // Umgebungshelligkeit: nur hellere Punkte strahlen auf
+      vec3 acc = vec3(0.0);
+      float ws = 0.0;
+      for (int i = 0; i < 112; i++) {
+        float rr = sqrt((float(i) + 0.5) / 112.0), th = float(i) * 2.39996323;
+        vec2 t = vec2(cos(th), sin(th)) * rr;
+        if (shape == 1) { vec2 h = abs(t); if (max(h.x * 0.866 + h.y * 0.5, h.y) > 0.82) continue; }
+        else if (shape == 2) { vec2 h = vec2(t.x * 1.2, -t.y * 1.2 + 0.1); float q = dot(h, h) - 1.0; if (q * q * q - h.x * h.x * h.y * h.y * h.y > 0.0) continue; }
+        vec3 sc = samp(p + t * r, lod);
+        float hl = clamp((lum(sc) - bgL - 0.04) * 2.5, 0.0, 1.0);
+        float w = 1.0 + b * 20.0 * hl;
+        acc += sc * (1.0 + b * 6.0 * hl) * w; ws += w;   // Lichter strahlen auf (wie überbelichtete Lichtquellen)
+      }
+      col = mix(col, acc / max(ws, 1e-4) * (1.0 + b * 0.12 * k), smoothstep(0.75, 3.0, r));   // weicher Übergang zur scharfen Mitte
+    }
+  }
+  else if (uFx == 22) {                    // FARBSÄUME: chromatische Aberration zum Rand hin oder seitlich
+    vec2 v = (p - C) / (L * 0.5);
+    vec2 off = b > 0.5 ? vec2(a * 0.012 * L, 0.0) : (p - C) * a * 0.03;
+    float lod = c * 4.0 * dot(v, v);
+    float rr = 0.0, gg = 0.0, bb = 0.0;
+    for (int i = 0; i < 5; i++) {
+      float t = float(i) / 4.0;
+      rr += samp(p - off * (0.5 + 0.5 * t), lod).r;
+      gg += samp(p - off * 0.25 * (t - 0.5), lod).g;
+      bb += samp(p + off * (0.5 + 0.5 * t), lod).b;
+    }
+    col = vec3(rr, gg, bb) / 5.0;
+    if (d > 0.0) {
+      float ed = smoothstep(0.25, 0.7, sobel(p, 1.5 * S, max(0.0, log2(S))));
+      float br = smoothstep(0.5, 0.9, lum(samp(p, 2.0 + max(0.0, log2(S)))));
+      col = mix(col, col * 0.6 + vec3(0.35, 0.05, 0.55), ed * br * d * 0.85);
+    }
+  }
+  else if (uFx == 23) {                    // ANAGLYPH 3D: Rot/Cyan-Versatz, Tiefe aus Helligkeit und Bildhöhe
+    float z = lum(samp(p, max(0.0, log2(L * 0.02)))) * 0.5 + (rel.y / uCrop.w) * 0.5;
+    float par = a * 0.012 * L * (0.35 + b * 2.0 * (z - d));
+    vec3 lc = samp(p + vec2(par, 0.0), 0.0), rc = samp(p - vec2(par, 0.0), 0.0);
+    col = vec3(mix(lum(lc), lc.r, c), mix(vec2(lum(rc)), rc.gb, c));
+  }
+  else if (uFx == 24) {                    // ASCII: Zeichen je Zelle nach Helligkeit
+    float chH = mix(0.012, 0.05, a) * L + 4.0 * S, chW = chH * 0.62;
+    vec2 cs = vec2(chW, chH), cell = floor(rel / cs), f = rel / cs - cell;
+    vec3 cc = samp(uCrop.xy + (cell + 0.5) * cs, max(0.0, log2(chW * 0.8)));
+    float l = clamp((lum(cc) - 0.5) * (1.0 + b * 3.0) + 0.5, 0.0, 1.0);
+    int mode = int(floor(c * 3.0 + 0.5)), set = int(floor(d * 2.0 + 0.5));
+    float dens = mode == 2 ? 1.0 - l : l, idx, inten = 1.0;
+    if (set == 0) idx = floor(dens * 9.0 + 0.5);
+    else if (set == 1) idx = floor(dens * 4.0 + 0.5);
+    else { idx = hash(cell + vec2(seed, 5.0)) < 0.5 ? 0.0 : 1.0; inten = smoothstep(0.06, 0.25, dens) * (0.3 + 0.7 * dens); }
+    vec2 gu = (vec2(idx, float(set)) + clamp(f, 0.02, 0.98)) / vec2(12.0, 3.0);
+    float gm = textureLod(uGlyph, gu, max(0.0, log2(48.0 / chH))).r * inten;
+    vec3 bg = vec3(0.0), fg = vec3(1.0);
+    if (mode == 0) { bg = vec3(0.01, 0.035, 0.02); fg = vec3(0.3, 1.0, 0.5); }
+    else if (mode == 1) { bg = vec3(0.02); fg = clamp(cc / max(max(cc.r, max(cc.g, cc.b)), 0.15) * 0.95, 0.0, 1.0); }
+    else if (mode == 2) { bg = vec3(0.96, 0.95, 0.91); fg = vec3(0.1, 0.1, 0.13); }
+    col = mix(bg, fg, gm);
+  }
+  o = vec4(clamp(col, 0.0, 1.0), al);
+}`;
+
 const FRAG_FINAL = `#version 300 es
 precision highp float;
 uniform sampler2D uTex, uMask;
@@ -1090,6 +1490,22 @@ void main() {
 }`;
 
 let GL = null;
+// Zeichen-Atlas für den ASCII-Effekt: 3 Zeilen × 12 Zellen (32 × 48 px), weiß auf schwarz
+function glyphAtlas() {
+  const cw = 32, ch = 48, c = document.createElement('canvas'); c.width = cw * 12; c.height = ch * 3;
+  const x = c.getContext('2d');
+  x.fillStyle = '#000'; x.fillRect(0, 0, c.width, c.height);
+  x.fillStyle = '#fff'; x.textAlign = 'center'; x.textBaseline = 'middle';
+  x.font = 'bold 36px ui-monospace, "Roboto Mono", "Droid Sans Mono", Menlo, Consolas, monospace';
+  ' .:-=+*#%@'.split('').forEach((g, i) => x.fillText(g, i * cw + cw / 2, ch / 2 + 2));
+  for (let i = 1; i < 5; i++)                    // Blöcke: vier Deckungsstufen aus Pixelmustern
+    for (let yy = 4; yy < ch - 4; yy += 4) for (let xx = 2; xx < cw - 2; xx += 4) {
+      const gx = (xx - 2) >> 2, gy = (yy - 4) >> 2, k = (gx + gy) % 2, k4 = (gx % 2) + 2 * (gy % 2);
+      if (i === 4 || (i === 3 && k4 !== 3) || (i === 2 && k === 0) || (i === 1 && k4 === 0)) x.fillRect(i * cw + xx, ch + yy, 4, 4);
+    }
+  x.fillText('0', cw / 2, ch * 2.5 + 2); x.fillText('1', cw * 1.5, ch * 2.5 + 2);
+  return c;
+}
 function initGL() {
   try {
     const c = document.createElement('canvas');
@@ -1114,6 +1530,7 @@ function initGL() {
     const P2 = mk(FRAG_COMIC, ['uTex','uSize','uScale','uEdge','uLine','uPost','uDots','uDotSize','uDotAngle','uSmooth','uPop','uPaper','uHatch','uHatchSize','uHatchAngle','uHatchCross']);
     const P4 = mk(FRAG_FX, ['uTex','uSize','uCrop','uP','uQ','uScale','uFx']);
     const P5 = mk(FRAG_RS, ['uTex','uSrc','uDst','uOff','uTileH','uSharp','uAlgo']);
+    const P6 = mk(FRAG_FX2, ['uTex','uTex2','uGlyph','uSize','uSize2','uCrop','uP','uQ','uScale','uFx','uHas2']);
     const P3 = mk(FRAG_FINAL, ['uTex','uMask','uSize','uC','uN','uMD','uR','uHW','uF','uGr','uGR','uMR','uGlowR','uGlow','uMaskR','uMaskLod','uMode','uUseMask','uTaps']);
     const vao = gl.createVertexArray(); gl.bindVertexArray(vao);
     gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
@@ -1147,6 +1564,14 @@ function initGL() {
     gl.useProgram(P3.prog); gl.uniform2fv(P3.u.uTaps, taps); gl.uniform1i(P3.u.uTex, 0); gl.uniform1i(P3.u.uMask, 1);
     gl.useProgram(P2.prog); gl.uniform1i(P2.u.uTex, 0);
     gl.useProgram(P4.prog); gl.uniform1i(P4.u.uTex, 0);
+    gl.useProgram(P6.prog); gl.uniform1i(P6.u.uTex, 0); gl.uniform1i(P6.u.uTex2, 2); gl.uniform1i(P6.u.uGlyph, 3);
+    // Zweites Foto (Doppelbelichtung) und Zeichen-Atlas (ASCII)
+    const fxTex2 = mkTex(gl.LINEAR_MIPMAP_LINEAR, gl.LINEAR);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([128, 128, 128, 255]));
+    gl.generateMipmap(gl.TEXTURE_2D);
+    const glyphTex = mkTex(gl.LINEAR_MIPMAP_LINEAR, gl.LINEAR);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE, glyphAtlas());
+    gl.generateMipmap(gl.TEXTURE_2D);
     gl.useProgram(P5.prog); gl.uniform1i(P5.u.uTex, 0);
     gl.useProgram(P1.prog); gl.uniform1i(P1.u.uImg, 0); gl.uniform1i(P1.u.uDet, 1);
     const vp = gl.getParameter(gl.MAX_VIEWPORT_DIMS);
@@ -1154,7 +1579,7 @@ function initGL() {
     c.addEventListener('webglcontextlost', e => { e.preventDefault(); GL = null; $('#glNote').hidden = false; schedule(); });
     // Zwei Textursätze: 'base' = Foto (bleibt hochgeladen), 'aux' = Ebenen, Vorschaukacheln, Kamera, Export
     const sets = { base: { img: imgTex, det: detTex, w: 1, h: 1, hasDet: false }, aux: { img: imgTex2, det: detTex2, w: 1, h: 1, hasDet: false } };
-    return { c, gl, P1, P2, P3, P4, P5, sets, maskTex, A, B, maxTex, state: 'none', maskKey: null };
+    return { c, gl, P1, P2, P3, P4, P5, P6, sets, maskTex, fxTex2, glyphTex, fx2: null, A, B, maxTex, state: 'none', maskKey: null };
   } catch (err) { console.warn('WebGL2 nicht verfügbar, nutze CPU:', err); return null; }
 }
 GL = initGL();
@@ -1247,17 +1672,23 @@ function glRun(p, geo, scale, set = 'base') {
   // Pass 2b: Kreativ-Effekt (Ping-Pong zwischen A und B)
   const fx = geo.fx !== undefined ? geo.fx : S.fx, fxId = FX_ID[fx] || 0;
   if (fxId) {
-    const out = cur === A ? B : A, v = fxParams(p, fx);
+    const out = cur === A ? B : A, v = fxParams(p, fx), PF = fxId >= 12 ? GL.P6 : P4;   // neue Effekte: zweites Programm
     glTarget(out, w, h);
     gl.bindFramebuffer(gl.FRAMEBUFFER, out.fb);
-    gl.useProgram(P4.prog);
+    gl.useProgram(PF.prog);
+    if (PF === GL.P6) {
+      gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, GL.fxTex2);
+      gl.activeTexture(gl.TEXTURE3); gl.bindTexture(gl.TEXTURE_2D, GL.glyphTex);
+      gl.uniform2f(PF.u.uSize2, GL.fx2 ? GL.fx2.w : 1, GL.fx2 ? GL.fx2.h : 1);
+      gl.uniform1i(PF.u.uHas2, GL.fx2 ? 1 : 0);
+    }
     gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, cur.t);
-    gl.uniform2f(P4.u.uSize, w, h);
-    gl.uniform4f(P4.u.uCrop, geo.crop[0], geo.crop[1], Math.max(1, geo.crop[2]), Math.max(1, geo.crop[3]));
-    gl.uniform4f(P4.u.uP, v[0], v[1], v[2], v[3]);
-    gl.uniform2f(P4.u.uQ, v[4], v[4]);
-    gl.uniform1f(P4.u.uScale, scale);
-    gl.uniform1i(P4.u.uFx, fxId);
+    gl.uniform2f(PF.u.uSize, w, h);
+    gl.uniform4f(PF.u.uCrop, geo.crop[0], geo.crop[1], Math.max(1, geo.crop[2]), Math.max(1, geo.crop[3]));
+    gl.uniform4f(PF.u.uP, v[0], v[1], v[2], v[3]);
+    gl.uniform2f(PF.u.uQ, v[4], v[4]);
+    gl.uniform1f(PF.u.uScale, scale);
+    gl.uniform1i(PF.u.uFx, fxId);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     gl.bindTexture(gl.TEXTURE_2D, out.t); gl.generateMipmap(gl.TEXTURE_2D);
@@ -1361,7 +1792,7 @@ function runProcess() {
   const needDet = S.p.structure !== 0 || S.p.sharpness !== 0;
   if (needDet) ensureDet();
   // Nur neu rechnen, wenn sich am Foto-Look etwas geändert hat (nicht bei reinen Ebenen-Änderungen)
-  const key = JSON.stringify([S.p, S.fx, S.ts, S.crop, S.blurs, base.width, base.height, !!detRG, !!GL]);
+  const key = JSON.stringify([S.p, S.fx, S.ts, S.crop, S.blurs, base.width, base.height, !!detRG, !!GL, fx2Ver]);
   if (key === baseKey && (!GL || GL.state === 'preview')) return;
   baseKey = key; baseVer++;
   if (GL) {
@@ -1803,7 +2234,7 @@ function adjMask(ob, x0, y0, w, h) {
 }
 function layerKey(ob, k) {
   const t = ob.type;
-  return JSON.stringify([ob.look, t, base.width, base.height, k,
+  return JSON.stringify([ob.look, t, base.width, base.height, k, fx2Ver,
     t === 'text' ? [ob.text, ob.font, ob.bold, ob.color, ob.stroke, ob.strokeColor, ob.shadow, ob.bg, ob.align, Math.round(ob.s * 100)]
     : t === 'cut' ? [ob.pts, ob.look.inherit ? baseVer : 0]
     : t === 'adjust' ? [ob.pts, ob.feather, ob.invert, ob.look.inherit ? baseVer : 0, S.crop] : ob.asset]);
@@ -2128,6 +2559,7 @@ view.addEventListener('pointerdown', e => {
     return;
   }
   if (!base) return;
+  if (pickMode) { pickColorAt(localPt(e)); return; }
   try { view.setPointerCapture(e.pointerId); } catch (_) {}
   const pt = localPt(e), touch = e.pointerType === 'touch';
   pointers.set(e.pointerId, pt);
@@ -2336,12 +2768,22 @@ for (const g of Object.keys(GROUPS)) if (g.startsWith('fx_')) { const d = el('di
 const sliders = {};
 for (const [g, list] of Object.entries(GROUPS)) {
   const box = document.querySelector(`[data-group="${g}"]`);
-  for (const [key, label, min, max] of list) {
+  for (const [key, label, min, max, opts] of list) {
+    if (opts) {                                   // Auswahl statt Regler
+      const row = el('div', 'row'), head = el('div', 'rowhead'), lab = el('label', null, label);
+      head.appendChild(lab); row.appendChild(head);
+      const chips = mkChips(opts.map((t, i) => [i, t]), DEFAULTS[key], v => { pOf(key)[key] = v; schedule(); commit(); });
+      row.appendChild(chips);
+      sliders[key] = { chips, min, max };
+      box.appendChild(row);
+      continue;
+    }
     const row = el('div', 'row');
     row.innerHTML = `<div class="rowhead"><label for="s-${key}"></label><button class="val" title="Antippen zum Zurücksetzen"></button></div>
       <input id="s-${key}" type="range" min="${min}" max="${max}" step="1">`;
     row.querySelector('label').textContent = label;
     const inp = row.querySelector('input'), val = row.querySelector('.val');
+    if (HUE_KEYS.has(key)) inp.classList.add('hue');
     inp.addEventListener('input', () => { pOf(key)[key] = +inp.value; paintSlider(key); schedule(); });
     inp.addEventListener('change', commit);
     const reset = () => { pOf(key)[key] = DEFAULTS[key]; paintSlider(key); schedule(); commit(); };
@@ -2353,6 +2795,7 @@ for (const [g, list] of Object.entries(GROUPS)) {
 }
 function paintSlider(key) {
   const s = sliders[key], v = pOf(key)[key];
+  if (s.chips) { [...s.chips.children].forEach((b, i) => b.classList.toggle('on', i === v)); return; }
   s.inp.value = v;
   s.val.textContent = (v > 0 && s.min < 0 ? '+' : '') + v + s.unit;
   s.val.classList.toggle('on', v !== DEFAULTS[key]);
@@ -2476,6 +2919,67 @@ function buildFxThumbs() {
   if (GL) schedule();
 }
 syncFx();
+
+// Color Splash: Farbe direkt im Bild antippen
+var pickMode = false;
+(() => {
+  const box = el('div', 'fxextra');
+  box.appendChild(tbtn('Farbe im Bild antippen', () => {
+    if (!base) { toast('Erst ein Foto öffnen'); return; }
+    pickMode = true; view.style.cursor = 'crosshair'; toast('Tippe im Bild auf die Farbe, die bleiben soll');
+  }));
+  document.querySelector('#fxSliders [data-group="fx_splash"]').prepend(box);
+})();
+function pickColorAt(pt) {
+  pickMode = false; view.style.cursor = '';
+  const b = screenToBase(pt), src = previewSrc(), r = Math.max(2, Math.min(base.width, base.height) * 0.006);
+  const c = document.createElement('canvas'); c.width = c.height = 6;
+  const x = c.getContext('2d', { willReadFrequently: true });
+  drawSrc(x, src, b.x - r, b.y - r, 2 * r, 2 * r, 0, 0, 6, 6);
+  const d = x.getImageData(0, 0, 6, 6).data; let R = 0, G = 0, B = 0;
+  for (let i = 0; i < d.length; i += 4) { R += d[i]; G += d[i + 1]; B += d[i + 2]; }
+  R /= 36; G /= 36; B /= 36;
+  const mx = Math.max(R, G, B), mn = Math.min(R, G, B), dd = mx - mn;
+  if (dd < 14) { toast('Diese Stelle ist fast grau – bitte eine farbige Stelle antippen'); return; }
+  let h = mx === R ? ((G - B) / dd) % 6 : mx === G ? (B - R) / dd + 2 : (R - G) / dd + 4;
+  TP().spHue = Math.round((h * 60 + 360) % 360);
+  paintSlider('spHue'); schedule(); commit(); toast('Farbe übernommen');
+}
+// Doppelbelichtung: zweites Foto wählen
+(() => {
+  const inp = el('input'); inp.type = 'file'; inp.accept = 'image/*'; inp.hidden = true; document.body.appendChild(inp);
+  const box = el('div', 'fxextra'), info = el('div', 'hint');
+  const pick = tbtn('Zweites Foto wählen', () => inp.click());
+  const clear = tbtn('Entfernen', () => { if (GL) GL.fx2 = null; fx2Ver++; syncFx2(); buildFxThumbs(); schedule(); });
+  box.append(pick, clear);
+  const g = document.querySelector('#fxSliders [data-group="fx_double"]'); g.prepend(info); g.prepend(box);
+  window.syncFx2 = () => {
+    const has = !!(GL && GL.fx2);
+    clear.hidden = !has; pick.textContent = has ? 'Anderes Foto wählen' : 'Zweites Foto wählen';
+    info.textContent = has ? 'Zweites Foto: ' + GL.fx2.name : 'Ohne zweites Foto wird das Bild gespiegelt mit sich selbst überlagert.';
+  };
+  inp.onchange = () => {
+    const f = inp.files[0]; inp.value = ''; if (!f || !GL) return;
+    const url = URL.createObjectURL(f), img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const m = Math.min(1, 3000 / Math.max(img.naturalWidth, img.naturalHeight));
+      const w = Math.max(1, Math.round(img.naturalWidth * m)), h = Math.max(1, Math.round(img.naturalHeight * m));
+      const c = document.createElement('canvas'); c.width = w; c.height = h; c.getContext('2d').drawImage(img, 0, 0, w, h);
+      const { gl } = GL;
+      gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, GL.fxTex2);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE, c); gl.generateMipmap(gl.TEXTURE_2D);
+      gl.activeTexture(gl.TEXTURE0);
+      GL.fx2 = { w, h, name: f.name };
+      fx2Ver++; syncFx2();
+      if (TFX() !== 'double') { setTFX('double'); syncFx(); commit(); }
+      buildFxThumbs(); schedule();
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); toast('Das Foto konnte nicht geladen werden'); };
+    img.src = url;
+  };
+  syncFx2();
+})();
 
 // --- Ziel der Regler: Foto oder eine Ebene ---
 function setTarget(id) {
