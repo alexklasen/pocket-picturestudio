@@ -58,6 +58,24 @@ body.cam #camCtl{display:flex}
 body.cam #empty,body.cam #zoomBadge{display:none !important}
 body.cam .tab[data-tab=crop],body.cam .tab[data-tab=layers],body.cam .tab[data-tab=vector]{display:none}
 body.cam #btnCam{color:var(--accent);background:rgba(242,184,75,.14)}
+#camFs{position:absolute;top:calc(12px + env(safe-area-inset-top));right:12px;display:none}
+body.cam #camFs{display:grid}
+/* Vollbild-Live: nur die Bühne, Bedienelemente schweben über dem Bild */
+body.camfs header,body.camfs aside{display:none !important}
+body.camfs #stage{background:#000}
+body.camfs #camCtl{bottom:calc(18px + env(safe-area-inset-bottom))}
+#camLooks{position:absolute;left:0;right:0;bottom:calc(108px + env(safe-area-inset-bottom));display:none;flex-direction:column;align-items:center;gap:8px;pointer-events:none}
+body.camfs #camLooks{display:flex}
+#camLooks .seg{pointer-events:auto;background:rgba(0,0,0,.5);border-color:rgba(255,255,255,.15);margin:0}
+#camLooks .seg button{flex:none;padding:6px 16px;color:#ddd}
+.lookrow{pointer-events:auto;display:flex;gap:6px;overflow-x:auto;max-width:100%;padding:0 12px 2px;scrollbar-width:none}
+.lookrow::-webkit-scrollbar{display:none}
+.lookrow .chip{background:rgba(0,0,0,.5);border-color:rgba(255,255,255,.2);color:#fff}
+.lookrow .chip.on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+#camLabel{position:absolute;top:18%;left:50%;transform:translateX(-50%);font-size:22px;font-weight:700;color:#fff;
+  text-shadow:0 2px 12px rgba(0,0,0,.7);opacity:0;transition:opacity .35s;pointer-events:none;white-space:nowrap}
+#camLabel.show{opacity:1}
+body.camfs #toast{bottom:calc(200px + env(safe-area-inset-bottom))}
 .drop{display:flex;flex-direction:column;align-items:center;gap:14px;text-align:center;padding:36px 28px;
   border:1.5px dashed #3a3d44;border-radius:18px;max-width:340px;width:100%}
 .drop svg{width:44px;height:44px;stroke-width:1.4;color:var(--accent)}
@@ -166,6 +184,7 @@ dialog::backdrop{background:rgba(0,0,0,.6)}
 dialog h2{font-size:17px;margin-bottom:14px}
 dialog .chips{margin-bottom:14px}
 .dlgbtns{display:flex;gap:8px;justify-content:flex-end;margin-top:16px;flex-wrap:wrap}
+.dlgtext{color:#cfd1d6;line-height:1.5;white-space:pre-line}
 .btn2{padding:9px 14px;border-radius:10px;background:var(--panel2);border:1px solid var(--line)}
 #busy{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;place-items:center;z-index:50}
 #busy div{display:flex;align-items:center;gap:12px;background:var(--panel);padding:14px 18px;border-radius:12px;border:1px solid var(--line)}
@@ -212,6 +231,13 @@ dialog .chips{margin-bottom:14px}
       <button class="cbtn" id="camFlip" title="Kamera wechseln" aria-label="Kamera wechseln"><svg viewBox="0 0 24 24"><path d="M20 7h-9a5 5 0 0 0 0 10h1"/><path d="m17 4 3 3-3 3"/><path d="M4 17h9a5 5 0 0 0 0-10h-1"/><path d="m7 20-3-3 3-3"/></svg></button>
     </div>
     <div id="camFlash"></div>
+    <button class="cbtn" id="camFs" title="Vollbild" aria-label="Vollbild"><svg viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M16 21h3a2 2 0 0 0 2-2v-3"/></svg></button>
+    <div id="camLooks">
+      <div class="seg" id="camLookCat"><button data-cat="filter" class="on">Filter</button><button data-cat="fx">Effekte</button></div>
+      <div class="lookrow" id="camLookFilter"></div>
+      <div class="lookrow" id="camLookFx" hidden></div>
+    </div>
+    <div id="camLabel"></div>
     <div id="empty">
       <div class="drop">
         <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/></svg>
@@ -351,6 +377,15 @@ dialog .chips{margin-bottom:14px}
   </div>
 </dialog>
 
+<dialog id="camDlg">
+  <h2>Live-Kamera nicht verfügbar</h2>
+  <p id="camDlgText" class="dlgtext"></p>
+  <div class="dlgbtns">
+    <button class="btn2" id="camDlgClose">Schließen</button>
+    <button class="save" id="camDlgApp">Kamera-App verwenden</button>
+  </div>
+</dialog>
+
 <div id="busy"><div><span class="spin"></span><span id="busyText">Wird exportiert …</span></div></div>
 <div id="toast"></div>
 
@@ -452,7 +487,8 @@ let pctx = null, outData = null;
 let tab = 'adjust', cropMode = false, aspect = 'free', showOrig = false;
 const split = { on: false, x: 0.5 };           // Vorher/Nachher-Teilung (x relativ zur sichtbaren Bildbreite)
 const vz = { z: 1, px: 0, py: 0 };             // Vorschau-Zoom (1 = eingepasst) und Verschiebung
-const cam = { on: false, ready: false, facing: 'environment', mirror: false, stream: null, cb: 0, proc: 1080 };   // Live-Kamera
+const cam = { on: false, ready: false, facing: 'environment', mirror: false, stream: null, cb: 0, proc: 1080, liveBlocked: false,
+              fs: false, fill: false, lastTap: 0, lookCat: 'filter', fsHint: false };   // Live-Kamera
 const subs = { adjust: 'light', effects: 'comic' };
 let lay = null;                                // Abbildung Bild → Bildschirm
 let exportFmt = 'image/jpeg';
@@ -1758,6 +1794,7 @@ function handleTap(pt) {
 
 view.addEventListener('pointerdown', e => {
   if (cam.on) {
+    if (cam.fs) { try { view.setPointerCapture(e.pointerId); } catch (_) {} gest = { type: 'camswipe', start: localPt(e), t0: e.timeStamp }; return; }
     if (tab === 'effects' && subs.effects === 'tilt' && lay) { try { view.setPointerCapture(e.pointerId); } catch (_) {} pointers.set(e.pointerId, localPt(e)); gest = { type: 'tilt', start: localPt(e), x0: S.ts.x, y0: S.ts.y }; }
     return;
   }
@@ -1842,6 +1879,17 @@ view.addEventListener('pointermove', e => {
 });
 function pointerEnd(e) {
   pointers.delete(e.pointerId);
+  if (gest && gest.type === 'camswipe') {       // Vollbild-Kamera: Wischen = nächster Look, Doppeltippen = Füllen/Einpassen
+    const g = gest, pt = localPt(e), dx = pt.x - g.start.x, dy = pt.y - g.start.y;
+    gest = null;
+    if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.3) cycleLook(dx < 0 ? 1 : -1);
+    else if (Math.hypot(dx, dy) < 12) {
+      // Pause zwischen Loslassen des 1. und Aufsetzen des 2. Tipps (Zeitstempel der Berührung, robust bei Last)
+      if (cam.lastTap && g.t0 - cam.lastTap < 300) { cam.lastTap = 0; cam.fill = !cam.fill; showCamLabel(cam.fill ? 'Füllen' : 'Einpassen'); render(); }
+      else cam.lastTap = e.timeStamp;
+    }
+    return;
+  }
   const g = gest;
   if (g && (g.type === 'pinch' || g.type === 'vpinch' || pointers.size === 0)) {
     gest = null;
@@ -2013,7 +2061,7 @@ FILTERS.forEach(([name, preset]) => {
   const b = el('button', 'flt');
   const cv = document.createElement('canvas'); cv.width = cv.height = 112;
   b.appendChild(cv); b.appendChild(document.createTextNode(name));
-  b.onclick = () => { for (const k of FILTER_KEYS) S.p[k] = DEFAULTS[k]; Object.assign(S.p, preset); syncSliders(); schedule(); commit(); };
+  b.onclick = () => applyFilter(preset);
   fltBtns.push({ b, cv, preset });
   fltBox.appendChild(b);
 });
@@ -2044,13 +2092,18 @@ function buildThumbs() {
   });
   if (GL) schedule();
 }
-function markFilter() {
-  fltBtns.forEach(f => {
-    const p = {};
-    for (const k of FILTER_KEYS) p[k] = DEFAULTS[k];
-    Object.assign(p, f.preset);
-    f.b.classList.toggle('on', FILTER_KEYS.every(k => p[k] === S.p[k]));
+function applyFilter(preset) { for (const k of FILTER_KEYS) S.p[k] = DEFAULTS[k]; Object.assign(S.p, preset); syncSliders(); schedule(); commit(); }
+// Index des Filters, der den aktuellen Einstellungen genau entspricht (sonst -1)
+function filterIndex() {
+  return FILTERS.findIndex(([, preset]) => {
+    const p = {}; for (const k of FILTER_KEYS) p[k] = DEFAULTS[k]; Object.assign(p, preset);
+    return FILTER_KEYS.every(k => p[k] === S.p[k]);
   });
+}
+function markFilter() {
+  const fi = filterIndex();
+  fltBtns.forEach((f, i) => f.b.classList.toggle('on', i === fi));
+  syncCamLooks();
 }
 
 // Kreativ-Effekte: Kacheln mit Vorschau, Auswahl, Regler je Effekt
@@ -2059,14 +2112,16 @@ FX.forEach(([t, name]) => {
   const b = el('button', 'flt');
   const cv = document.createElement('canvas'); cv.width = cv.height = 112;
   b.appendChild(cv); b.appendChild(document.createTextNode(name));
-  b.onclick = () => {
-    if (t !== 'none' && !GL) { toast('Kreativ-Effekte brauchen WebGL2 – dein Browser unterstützt das leider nicht.'); return; }
-    S.fx = t; syncFx(); schedule(); commit();
-  };
+  b.onclick = () => chooseFx(t);
   fxBtns.push({ b, cv, t });
   fxBox.appendChild(b);
 });
+function chooseFx(t) {
+  if (t !== 'none' && !GL) { toast('Kreativ-Effekte brauchen WebGL2 – dein Browser unterstützt das leider nicht.'); return; }
+  S.fx = t; syncFx(); schedule(); commit();
+}
 function syncFx() {
+  syncCamLooks();
   fxBtns.forEach(f => f.b.classList.toggle('on', f.t === S.fx));
   document.querySelectorAll('#fxSliders [data-group]').forEach(d => d.hidden = d.dataset.group !== FX_GROUP(S.fx));
   $('#fxReset').hidden = S.fx === 'none';
@@ -2762,7 +2817,7 @@ $('#btnRedo').onclick = redo;
 const isTyping = () => { const a = document.activeElement; return a && (a.tagName === 'TEXTAREA' || a.tagName === 'SELECT' || (a.tagName === 'INPUT' && a.type !== 'range')); };
 document.addEventListener('keydown', e => {
   if (cam.on && !isTyping() && (e.key === ' ' || e.key === 'Enter') && document.activeElement.tagName !== 'BUTTON') { e.preventDefault(); camCapture(); return; }
-  if (cam.on && e.key === 'Escape') { stopCam(); return; }
+  if (cam.on && e.key === 'Escape') { cam.fs ? setCamFs(false) : stopCam(); return; }
   if (isTyping() || !base) return;
   const mod = e.ctrlKey || e.metaKey, k = e.key.toLowerCase();
   if (mod && k === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); }
@@ -2877,14 +2932,16 @@ function drawCam() {
     vctx.fillText('Kamera wird gestartet …', cw / 2, ch / 2); vctx.textAlign = 'start';
     return;
   }
-  const w = camOut.width, h = camOut.height, bottom = 100;   // unten Platz für den Auslöser
-  const k = Math.max(0.01, Math.min((cw - 28) / w, (ch - 14 - bottom) / h));
-  const R = { x: (cw - w * k) / 2, y: 14 + (ch - 14 - bottom - h * k) / 2, w: w * k, h: h * k };
+  const w = camOut.width, h = camOut.height, fs = cam.fs;
+  const top = fs ? 0 : 14, side = fs ? 0 : 14, bottom = fs ? 0 : 100;   // normal: unten Platz für den Auslöser
+  const kFit = Math.max(0.01, Math.min((cw - 2 * side) / w, (ch - top - bottom) / h));
+  const k = fs && cam.fill ? Math.max(cw / w, ch / h) : kFit;
+  const R = { x: (cw - w * k) / 2, y: top + (ch - top - bottom - h * k) / 2, w: w * k, h: h * k };
   lay = { T: { k, ox: R.x, oy: R.y }, rect: R, k0: k, region: { x: 0, y: 0, w, h }, cw, ch };
   vctx.imageSmoothingQuality = 'high';
   vctx.drawImage(camOut, R.x, R.y, R.w, R.h);
   drawVignette(vctx, R.x, R.y, R.w, R.h, S.p.vignette);
-  if (tab === 'effects' && subs.effects === 'tilt') drawTiltOverlay();
+  if (!fs && tab === 'effects' && subs.effects === 'tilt') drawTiltOverlay();
 }
 function camLoop() {
   if (!cam.on) return;
@@ -2892,18 +2949,41 @@ function camLoop() {
   cam.cb = camVideo.requestVideoFrameCallback ? camVideo.requestVideoFrameCallback(camLoop) : requestAnimationFrame(camLoop);
 }
 const liveCamPossible = () => window.isSecureContext && navigator.mediaDevices && navigator.mediaDevices.getUserMedia;
+// Erklärt, warum die Live-Kamera nicht startet, und bietet die Kamera-App als Ersatz an
+const CAM_HELP = {
+  local: 'Dein Browser erlaubt die Live-Kamera nicht für lokal geöffnete Dateien – deshalb kam keine Rückfrage. Bei Chrome auf Android ist das immer so.\n\n'
+       + 'Für die Live-Vorschau muss die Datei über eine https-Adresse geöffnet werden (z. B. kostenlos über GitHub Pages oder Netlify) oder über einen lokalen Server (http://localhost).\n\n'
+       + 'Bis dahin: Foto mit der Kamera-App aufnehmen – deine aktuellen Einstellungen und Effekte werden danach automatisch angewendet.',
+  blocked: 'Der Kamerazugriff ist für diese Seite blockiert.\n\nIn Chrome: links neben der Adresse auf das Symbol tippen → Berechtigungen → Kamera → Zulassen. Danach erneut auf das Kamera-Symbol tippen.\n\n'
+         + 'Oder: Foto mit der Kamera-App aufnehmen – die Einstellungen werden danach angewendet.',
+  denied: 'Der Kamerazugriff wurde abgelehnt. Tippe erneut auf das Kamera-Symbol und erlaube den Zugriff in der Rückfrage.\n\nOder: Foto mit der Kamera-App aufnehmen – die Einstellungen werden danach angewendet.',
+  busy: 'Die Kamera wird gerade von einer anderen App verwendet. Schließe die andere App und versuche es erneut – oder nimm das Foto mit der Kamera-App auf.',
+  nocam: 'Es wurde keine Kamera gefunden. Du kannst stattdessen ein Foto mit der Kamera-App aufnehmen oder ein Bild öffnen.'
+};
+function camHelp(reason) {
+  if (reason === 'local') cam.liveBlocked = true;     // nächstes Mal direkt zur Kamera-App
+  $('#camDlgText').textContent = CAM_HELP[reason] || CAM_HELP.denied;
+  $('#camDlg').showModal();
+}
+$('#camDlgClose').onclick = () => $('#camDlg').close();
+$('#camDlgApp').onclick = () => { $('#camDlg').close(); $('#fileCam').click(); };   // frischer Tipp → Dateiauswahl darf öffnen
 async function startCam() {
-  if (!liveCamPossible()) {
-    toast('Live-Kamera braucht HTTPS – ich öffne die Kamera-App, die Einstellungen werden danach angewendet.');
-    $('#fileCam').click(); return;
-  }
+  if (cam.liveBlocked) { toast('Live-Kamera ist hier nicht möglich – Kamera-App wird geöffnet.'); $('#fileCam').click(); return; }
+  const local = location.protocol === 'file:' || location.protocol === 'content:';
+  if (!liveCamPossible()) { camHelp('local'); return; }
   try {
     cam.stream = await navigator.mediaDevices.getUserMedia({ audio: false,
       video: { facingMode: { ideal: cam.facing }, width: { ideal: 3840 }, height: { ideal: 2160 } } });
   } catch (err) {
-    console.warn(err);
-    toast(err.name === 'NotAllowedError' ? 'Kamerazugriff wurde nicht erlaubt.' : 'Keine Kamera gefunden – ich öffne stattdessen die Kamera-App.');
-    if (err.name !== 'NotAllowedError') $('#fileCam').click();
+    console.warn('Kamera:', err.name, err.message);
+    let reason = 'denied';
+    if (err.name === 'NotAllowedError' || err.name === 'SecurityError') {
+      let state = null;
+      try { state = (await navigator.permissions.query({ name: 'camera' })).state; } catch (_) {}
+      reason = local ? 'local' : state === 'denied' ? 'blocked' : 'denied';
+    } else if (err.name === 'NotFoundError' || err.name === 'OverconstrainedError') reason = 'nocam';
+    else if (err.name === 'NotReadableError' || err.name === 'AbortError') reason = 'busy';
+    camHelp(reason);
     return;
   }
   const track = cam.stream.getVideoTracks()[0], st = track && track.getSettings ? track.getSettings() : {};
@@ -2921,6 +3001,7 @@ async function startCam() {
 }
 function stopCam() {
   if (!cam.on) return;
+  if (cam.fs) setCamFs(false);
   cam.on = false; cam.ready = false;
   if (camVideo.cancelVideoFrameCallback && cam.cb) { try { camVideo.cancelVideoFrameCallback(cam.cb); } catch (_) {} }
   cancelAnimationFrame(cam.cb);
@@ -2959,6 +3040,60 @@ $('#camFlip').onclick = flipCam;
 $('#camShot').onclick = camCapture;
 $('#fileCam').onchange = e => { const f = e.target.files[0]; e.target.value = ''; if (f) { loadFile(f, true); toast('Foto übernommen – Einstellungen angewendet.'); } };
 document.addEventListener('visibilitychange', () => { if (document.hidden && cam.on) stopCam(); });
+
+// --- Vollbild-Live ---
+const ICON_MAX = '<svg viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M16 21h3a2 2 0 0 0 2-2v-3"/></svg>';
+const ICON_MIN = '<svg viewBox="0 0 24 24"><path d="M8 3v3a2 2 0 0 1-2 2H3M21 8h-3a2 2 0 0 1-2-2V3M3 16h3a2 2 0 0 1 2 2v3M16 21v-3a2 2 0 0 1 2-2h3"/></svg>';
+async function setCamFs(on) {
+  cam.fs = on;
+  document.body.classList.toggle('camfs', on);
+  const b = $('#camFs'); b.innerHTML = on ? ICON_MIN : ICON_MAX; b.title = on ? 'Vollbild beenden' : 'Vollbild';
+  if (on) {
+    syncCamLooks(true);
+    try { if (document.documentElement.requestFullscreen && !document.fullscreenElement) await document.documentElement.requestFullscreen({ navigationUI: 'hide' }); } catch (_) {}
+    if (!cam.fsHint) { cam.fsHint = true; toast('Wischen = nächster Look · Doppeltippen = Füllen/Einpassen'); }
+  } else {
+    try { if (document.fullscreenElement) await document.exitFullscreen(); } catch (_) {}
+  }
+  render();
+}
+document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement && cam.fs) setCamFs(false); });   // z. B. Zurück-Taste
+$('#camFs').onclick = () => setCamFs(!cam.fs);
+
+// Look-Leiste im Vollbild: Filter oder Kreativ-Effekte als Chips
+var camLookEls = null;                          // var: wird von syncFx() schon beim Start abgefragt
+(() => {
+  const fBox = $('#camLookFilter'), xBox = $('#camLookFx'), filter = [], fx = [];
+  FILTERS.forEach(([name, preset], i) => { const c = el('button', 'chip', name); c.onclick = () => { applyFilter(preset); showCamLabel(name); }; fBox.appendChild(c); filter.push(c); });
+  FX.forEach(([t, name]) => { const c = el('button', 'chip', name); c.onclick = () => { chooseFx(t); showCamLabel(name); }; xBox.appendChild(c); fx.push(c); });
+  camLookEls = { filter, fx };
+  document.querySelectorAll('#camLookCat button').forEach(b => b.onclick = () => { cam.lookCat = b.dataset.cat; syncCamLooks(true); });
+})();
+function syncCamLooks(scroll) {
+  if (!camLookEls) return;
+  document.querySelectorAll('#camLookCat button').forEach(b => b.classList.toggle('on', b.dataset.cat === cam.lookCat));
+  $('#camLookFilter').hidden = cam.lookCat !== 'filter'; $('#camLookFx').hidden = cam.lookCat !== 'fx';
+  const fi = filterIndex(), xi = FX.findIndex(f => f[0] === S.fx);
+  camLookEls.filter.forEach((c, i) => c.classList.toggle('on', i === fi));
+  camLookEls.fx.forEach((c, i) => c.classList.toggle('on', i === xi));
+  if (scroll) { const on = (cam.lookCat === 'filter' ? camLookEls.filter[fi] : camLookEls.fx[xi]); if (on) on.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' }); }
+}
+// Wischen: nächster/vorheriger Look der gewählten Kategorie
+function cycleLook(dir) {
+  if (cam.lookCat === 'filter') {
+    const i = ((filterIndex() < 0 ? 0 : filterIndex()) + dir + FILTERS.length) % FILTERS.length;
+    applyFilter(FILTERS[i][1]); showCamLabel(FILTERS[i][0]);
+  } else {
+    const i = (Math.max(0, FX.findIndex(f => f[0] === S.fx)) + dir + FX.length) % FX.length;
+    chooseFx(FX[i][0]); showCamLabel(FX[i][1]);
+  }
+  syncCamLooks(true);
+}
+let camLabelT = 0;
+function showCamLabel(text) {
+  const l = $('#camLabel'); l.textContent = text; l.classList.add('show');
+  clearTimeout(camLabelT); camLabelT = setTimeout(() => l.classList.remove('show'), 900);
+}
 
 /* =====================================================================
    15. EXPORT
