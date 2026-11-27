@@ -411,7 +411,9 @@ const GROUPS = {
   color:  [['saturation','Sättigung',-100,100],['vibrance','Dynamik',-100,100],['warmth','Wärme',-100,100],['tint','Tönung',-100,100],['hue','Farbton',-180,180]],
   detail: [['structure','Struktur',-100,100],['sharpness','Schärfe',0,100],['grain','Körnung',0,100],['vignette','Vignette',-100,100]],
   comic:  [['inkEdges','Konturen',0,100],['inkWidth','Linienstärke',0,100],['posterize','Farbreduktion',0,100],['comicSmooth','Glättung',0,100],
-           ['comicPop','Farbkraft',0,100],['halftone','Rasterpunkte',0,100],['dotSize','Rastergröße',0,100],['dotAngle','Rasterwinkel',0,90],['comicPaper','Altes Papier',0,100]],
+           ['comicPop','Farbkraft',0,100],['halftone','Rasterpunkte',0,100],['dotSize','Rastergröße',0,100],['dotAngle','Rasterwinkel',0,90],
+           ['hatch','Schraffur',0,100],['hatchSize','Schraffur-Abstand',0,100],['hatchAngle','Schraffur-Winkel',0,180],['hatchCross','Kreuzschraffur',0,100],
+           ['comicPaper','Altes Papier',0,100]],
   tilt:   [['tsBlur','Unschärfe',0,100],['tsSize','Fokusbereich',0,100],['tsFeather','Übergang',0,100],['tsAngle','Winkel',-90,90]],
   blur:   [['blurGauss','Weichzeichnen',0,100],['blurMotion','Bewegung',0,100],['motionAngle','Bewegungsrichtung',-90,90],['glow','Glanz',0,100]],
   // Kreativ-Effekte (je Effekt eine Gruppe; Tunnel nutzt die Planet-Regler)
@@ -429,6 +431,7 @@ const GROUPS = {
 const KEYS = Object.values(GROUPS).flat().map(x => x[0]);
 const DEFAULTS = Object.fromEntries(KEYS.map(k => [k, 0]));
 Object.assign(DEFAULTS, { inkWidth: 30, tsSize: 25, tsFeather: 40, comicSmooth: 25, dotSize: 40, dotAngle: 45,
+  hatchSize: 40, hatchAngle: 45, hatchCross: 50,
   gAmt: 50, gRgb: 40, gBlocks: 40, gScan: 30, vBleed: 50, vTrack: 40, vNoise: 30, vWave: 30,
   pxSize: 35, oBrush: 50, oDetail: 50, oCanvas: 30, oPop: 20, pcHatch: 50, pcEdge: 50, pcPaper: 40,
   nGlow: 60, nWidth: 40, nBg: 10, dShadow: 240, dLight: 40, dContrast: 30, tContrast: 40, tSmooth: 30,
@@ -444,7 +447,7 @@ function fxParams(p, t) {                      // Regler des Effekts → 0..1 f�
 }
 const REGION_BLUR_DEFAULT = 60;   // Startstärke für weichgezeichnete Bereiche
 const FILTER_KEYS = [...GROUPS.light, ...GROUPS.color, ...GROUPS.detail, ...GROUPS.comic].map(x => x[0]).concat('glow');
-const UNITS = { hue: '°', tsAngle: '°', motionAngle: '°', dotAngle: '°', dShadow: '°', dLight: '°', kRot: '°', plRot: '°' };
+const UNITS = { hue: '°', tsAngle: '°', motionAngle: '°', dotAngle: '°', hatchAngle: '°', dShadow: '°', dLight: '°', kRot: '°', plRot: '°' };
 const FILTERS = [
   ['Original', {}],
   ['Lebendig', {contrast:15, saturation:18, vibrance:35, structure:15}],
@@ -458,6 +461,8 @@ const FILTERS = [
   ['Comic',    {inkEdges:65, inkWidth:35, posterize:55, saturation:15, contrast:10}],
   ['Pop-Art',  {inkEdges:55, inkWidth:45, posterize:80, halftone:85, dotSize:35, comicPop:40, contrast:20}],
   ['Retro-Comic', {inkEdges:60, inkWidth:40, posterize:60, comicSmooth:45, halftone:55, dotSize:30, comicPaper:70, contrast:10}],
+  ['Graphic Novel', {inkEdges:70, inkWidth:40, posterize:65, comicSmooth:50, hatch:55, hatchSize:35, hatchCross:55, comicPop:20, saturation:-25, contrast:15}],
+  ['Tusche',   {saturation:-100, brightness:18, contrast:20, inkEdges:75, inkWidth:35, posterize:35, comicSmooth:40, hatch:65, hatchSize:30, hatchCross:60, comicPaper:25}],
   ['Skizze',   {saturation:-100, brightness:35, contrast:-30, inkEdges:85, inkWidth:20}],
   ['Verträumt',{glow:55, brightness:8, contrast:-8, warmth:12, saturation:-8, vignette:20}]
 ];
@@ -676,7 +681,7 @@ const FRAG_COMIC = `#version 300 es
 precision highp float;
 uniform sampler2D uTex;
 uniform vec2 uSize;
-uniform float uScale, uEdge, uLine, uPost, uDots, uDotSize, uDotAngle, uSmooth, uPop, uPaper;
+uniform float uScale, uEdge, uLine, uPost, uDots, uDotSize, uDotAngle, uSmooth, uPop, uPaper, uHatch, uHatchSize, uHatchAngle, uHatchCross;
 out vec4 o;
 float lum(vec3 c) { return dot(c, vec3(0.299, 0.587, 0.114)); }
 vec3 tap(vec2 fc, float lod) { return textureLod(uTex, fc / uSize, lod).rgb; }
@@ -707,6 +712,29 @@ void main() {
     float d = length(g - cc), aa = 1.0 / cell;
     float m = 1.0 - smoothstep(rr - aa, rr + aa, d);
     c = mix(c, mix(min(c * 1.06 + 0.05, vec3(1.0)), c * 0.3, m), uDots);
+  }
+  if (uHatch > 0.0) {                      // Schraffur in den Schatten: je dunkler, desto breitere Striche + Kreuzlagen
+    vec2 pimg = vec2(fc.x, uSize.y - fc.y);
+    float dark = 1.0 - lum(tap(fc, baseLod + 1.0));          // geglättete Helligkeit → ruhige Strichbreiten
+    float sp = mix(3.0, 11.0, uHatchSize) * uScale;
+    float t1 = mix(0.8, 0.3, uHatch);                         // ab dieser Dunkelheit beginnt die Schraffur
+    uvec2 cu = uvec2(pimg / (sp * 6.0));                       // leichte Unregelmäßigkeit wie von Hand
+    uint hh = (cu.x * 2654435761u) ^ (cu.y * 2246822519u); hh ^= hh >> 15; hh *= 0x2c1b3c6du; hh ^= hh >> 12;
+    float jit = float(hh & 1023u) / 1023.0 - 0.5;
+    const vec3 offs = vec3(0.0, 1.5708, 0.7854);              // Grundrichtung, quer, diagonal
+    // Grund in schraffierten Schatten aufhellen → die Striche tragen das Dunkel (wie bei Tusche)
+    c += (1.0 - c) * uHatch * 0.6 * smoothstep(t1 - 0.05, t1 + 0.45, dark);
+    float ink = 0.0, aa = 0.7 / sp;
+    for (int k = 0; k < 3; k++) {
+      if (k > 0 && uHatchCross <= 0.0) break;
+      float thr = t1 + float(k) * mix(0.38, 0.12, uHatchCross);
+      float a = uHatchAngle + offs[k];
+      float t = dot(pimg, vec2(cos(a), sin(a))) / sp + jit * 0.25 + float(k) * 0.37;
+      float w = clamp((dark - thr) / 0.25, 0.0, 1.0) * 0.55;
+      float dl = abs(fract(t) - 0.5);
+      ink = max(ink, step(0.001, w) * (1.0 - smoothstep(w * 0.5 - aa, w * 0.5 + aa, dl)));
+    }
+    c *= 1.0 - 0.9 * ink;
   }
   if (uEdge > 0.0) {                       // Konturen (Sobel)
     float w = mix(0.7, 3.2, uLine) * uScale;
@@ -976,7 +1004,7 @@ function initGL() {
       return { prog, u };
     };
     const P1 = mk(FRAG_ADJUST, ['uImg','uDet','uUseDet','uHue','uGamma','uCf','uSk','uTk','uSh','uHi','uWarm','uTint','uSat','uVib','uH','uM']);
-    const P2 = mk(FRAG_COMIC, ['uTex','uSize','uScale','uEdge','uLine','uPost','uDots','uDotSize','uDotAngle','uSmooth','uPop','uPaper']);
+    const P2 = mk(FRAG_COMIC, ['uTex','uSize','uScale','uEdge','uLine','uPost','uDots','uDotSize','uDotAngle','uSmooth','uPop','uPaper','uHatch','uHatchSize','uHatchAngle','uHatchCross']);
     const P4 = mk(FRAG_FX, ['uTex','uSize','uCrop','uP','uQ','uScale','uFx']);
     const P3 = mk(FRAG_FINAL, ['uTex','uMask','uSize','uC','uN','uMD','uR','uHW','uF','uGr','uGR','uMR','uGlowR','uGlow','uMaskR','uMaskLod','uMode','uUseMask','uTaps']);
     const vao = gl.createVertexArray(); gl.bindVertexArray(vao);
@@ -1038,7 +1066,7 @@ function glUploadDet(rg, w, h) {
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RG32F, w, h, 0, gl.RG, gl.FLOAT, rg);
   GL.hasDet = true;
 }
-const comicOn = p => p.inkEdges > 0 || p.posterize > 0 || p.halftone > 0 || p.comicPop > 0 || p.comicPaper > 0;
+const comicOn = p => p.inkEdges > 0 || p.posterize > 0 || p.halftone > 0 || p.comicPop > 0 || p.comicPaper > 0 || p.hatch > 0;
 
 function glRun(p, geo, scale) {
   const { gl, c, P1, P2, P3, P4, A, B } = GL, w = GL.w, h = GL.h;
@@ -1092,6 +1120,10 @@ function glRun(p, geo, scale) {
     gl.uniform1f(P2.u.uSmooth, p.comicSmooth / 100);
     gl.uniform1f(P2.u.uPop, p.comicPop / 100);
     gl.uniform1f(P2.u.uPaper, p.comicPaper / 100);
+    gl.uniform1f(P2.u.uHatch, p.hatch / 100);
+    gl.uniform1f(P2.u.uHatchSize, p.hatchSize / 100);
+    gl.uniform1f(P2.u.uHatchAngle, p.hatchAngle * Math.PI / 180);
+    gl.uniform1f(P2.u.uHatchCross, p.hatchCross / 100);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     gl.bindTexture(gl.TEXTURE_2D, B.t); gl.generateMipmap(gl.TEXTURE_2D);
