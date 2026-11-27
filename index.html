@@ -204,7 +204,12 @@ textarea:focus{outline:none;border-color:var(--accent)}
 
 /* Dialog, busy, toast */
 dialog{margin:auto;border:1px solid var(--line);border-radius:16px;background:var(--panel);color:var(--text);
-  padding:20px;width:min(360px,calc(100vw - 32px))}
+  padding:20px;width:min(380px,calc(100vw - 32px));max-height:92dvh;overflow-y:auto}
+.sizerow{display:flex;align-items:center;gap:8px;margin:2px 0 6px;color:#cfd1d6;font-size:13px}
+.sizerow input{width:96px;background:var(--panel2);border:1px solid var(--line);border-radius:8px;color:var(--text);padding:6px 8px;font:16px system-ui,sans-serif}
+.sizerow input:focus{outline:none;border-color:var(--accent)}
+.muted{color:var(--muted)}
+#algoChips,#scaleChips{flex-wrap:wrap}
 dialog::backdrop{background:rgba(0,0,0,.6)}
 dialog h2{font-size:17px;margin-bottom:14px}
 dialog .chips{margin-bottom:14px}
@@ -403,6 +408,21 @@ dialog .chips{margin-bottom:14px}
   <div class="row" id="qRow">
     <div class="rowhead"><label for="quality">Qualität</label><span class="val on" id="qVal">92</span></div>
     <input type="range" id="quality" min="50" max="100" value="92">
+  </div>
+  <div class="label">GRÖSSE</div>
+  <div class="chips" id="scaleChips">
+    <button class="chip" data-s="0.5">50 %</button><button class="chip on" data-s="1">100 %</button><button class="chip" data-s="1.5">150 %</button>
+    <button class="chip" data-s="2">200 %</button><button class="chip" data-s="3">300 %</button><button class="chip" data-s="4">400 %</button>
+  </div>
+  <div class="sizerow"><label for="outW">Breite</label><input type="number" id="outW" min="16" step="1" inputmode="numeric"><span>px</span><span class="muted" id="outH"></span></div>
+  <div id="upOpts" hidden>
+    <div class="label">VERGRÖSSERN MIT</div>
+    <div class="chips" id="algoChips">
+      <button class="chip" data-a="nearest">Nächster Nachbar</button><button class="chip" data-a="bilinear">Bilinear</button>
+      <button class="chip" data-a="bicubic">Bikubisch</button><button class="chip on" data-a="lanczos">Lanczos</button><button class="chip" data-a="pixel">Pixel-Art</button>
+    </div>
+    <div class="hint" id="algoHint"></div>
+    <div id="sharpRow"></div>
   </div>
   <div class="info" id="expInfo"></div>
   <div class="dlgbtns">
@@ -789,6 +809,50 @@ void main() {
   }
   o = vec4(c, src.a);
 }`;
+// Hochrechnen (Interpolation) ohne KI: Nächster Nachbar, Bilinear, Bikubisch (Catmull-Rom), Lanczos-3.
+// Rechnet mit vormultiplizierter Transparenz (keine dunklen Säume an transparenten Rändern). Kachelweise (uOff).
+const FRAG_RS = `#version 300 es
+precision highp float;
+uniform sampler2D uTex;
+uniform vec2 uSrc, uDst, uOff;
+uniform float uTileH, uSharp;
+uniform int uAlgo;
+out vec4 o;
+vec4 px(ivec2 p) { vec4 c = texelFetch(uTex, clamp(p, ivec2(0), ivec2(uSrc) - 1), 0); return vec4(c.rgb * c.a, c.a); }
+float cubic(float x) { x = abs(x); return x < 1.0 ? (1.5 * x - 2.5) * x * x + 1.0 : x < 2.0 ? ((-0.5 * x + 2.5) * x - 4.0) * x + 2.0 : 0.0; }
+float sinc(float x) { x *= 3.14159265; return abs(x) < 1e-4 ? 1.0 : sin(x) / x; }
+float lanc(float x) { return abs(x) < 3.0 ? sinc(x) * sinc(x / 3.0) : 0.0; }
+vec4 bil(vec2 sp) {
+  vec2 i = floor(sp), f = sp - i; ivec2 b = ivec2(i);
+  return mix(mix(px(b), px(b + ivec2(1, 0)), f.x), mix(px(b + ivec2(0, 1)), px(b + ivec2(1, 1)), f.x), f.y);
+}
+vec4 kern(vec2 sp) {
+  if (uAlgo == 0) return px(ivec2(floor(sp + 0.5)));
+  if (uAlgo == 1) return bil(sp);
+  vec2 i = floor(sp), f = sp - i; ivec2 b = ivec2(i);
+  vec4 acc = vec4(0.0); float ws = 0.0;
+  if (uAlgo == 2) {
+    for (int y = -1; y <= 2; y++) for (int x = -1; x <= 2; x++) {
+      float w = cubic(float(x) - f.x) * cubic(float(y) - f.y); acc += w * px(b + ivec2(x, y)); ws += w;
+    }
+  } else {
+    for (int y = -2; y <= 3; y++) for (int x = -2; x <= 3; x++) {
+      float w = lanc(float(x) - f.x) * lanc(float(y) - f.y); acc += w * px(b + ivec2(x, y)); ws += w;
+    }
+  }
+  return acc / ws;
+}
+void main() {
+  vec2 pd = vec2(gl_FragCoord.x, uTileH - gl_FragCoord.y) + uOff;   // Zielpixel, y nach unten
+  vec2 sp = pd * uSrc / uDst - 0.5;                                  // Position im Quellbild
+  vec4 r = kern(sp);
+  if (uSharp > 0.0) {                                                // Nachschärfen (Unscharf maskieren)
+    vec4 bl = (bil(sp + vec2(0.8, 0.0)) + bil(sp - vec2(0.8, 0.0)) + bil(sp + vec2(0.0, 0.8)) + bil(sp - vec2(0.0, 0.8))) * 0.25;
+    r += uSharp * (r - bl);
+  }
+  float a = clamp(r.a, 0.0, 1.0);
+  o = vec4(a > 0.0 ? clamp(r.rgb / max(r.a, 1e-4), 0.0, 1.0) : vec3(0.0), a);
+}`;
 // Kreativ-Effekte: ein Durchgang, Effekt per uFx gewählt. Größen relativ zum Zuschnitt (L) → Vorschau = Export.
 const FRAG_FX = `#version 300 es
 precision highp float;
@@ -1047,6 +1111,7 @@ function initGL() {
     const P1 = mk(FRAG_ADJUST, ['uImg','uDet','uUseDet','uHue','uGamma','uCf','uSk','uTk','uSh','uHi','uWarm','uTint','uSat','uVib','uH','uM']);
     const P2 = mk(FRAG_COMIC, ['uTex','uSize','uScale','uEdge','uLine','uPost','uDots','uDotSize','uDotAngle','uSmooth','uPop','uPaper','uHatch','uHatchSize','uHatchAngle','uHatchCross']);
     const P4 = mk(FRAG_FX, ['uTex','uSize','uCrop','uP','uQ','uScale','uFx']);
+    const P5 = mk(FRAG_RS, ['uTex','uSrc','uDst','uOff','uTileH','uSharp','uAlgo']);
     const P3 = mk(FRAG_FINAL, ['uTex','uMask','uSize','uC','uN','uMD','uR','uHW','uF','uGr','uGR','uMR','uGlowR','uGlow','uMaskR','uMaskLod','uMode','uUseMask','uTaps']);
     const vao = gl.createVertexArray(); gl.bindVertexArray(vao);
     gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
@@ -1080,13 +1145,14 @@ function initGL() {
     gl.useProgram(P3.prog); gl.uniform2fv(P3.u.uTaps, taps); gl.uniform1i(P3.u.uTex, 0); gl.uniform1i(P3.u.uMask, 1);
     gl.useProgram(P2.prog); gl.uniform1i(P2.u.uTex, 0);
     gl.useProgram(P4.prog); gl.uniform1i(P4.u.uTex, 0);
+    gl.useProgram(P5.prog); gl.uniform1i(P5.u.uTex, 0);
     gl.useProgram(P1.prog); gl.uniform1i(P1.u.uImg, 0); gl.uniform1i(P1.u.uDet, 1);
     const vp = gl.getParameter(gl.MAX_VIEWPORT_DIMS);
     const maxTex = Math.min(gl.getParameter(gl.MAX_TEXTURE_SIZE), vp[0], vp[1]);
     c.addEventListener('webglcontextlost', e => { e.preventDefault(); GL = null; $('#glNote').hidden = false; schedule(); });
     // Zwei Textursätze: 'base' = Foto (bleibt hochgeladen), 'aux' = Ebenen, Vorschaukacheln, Kamera, Export
     const sets = { base: { img: imgTex, det: detTex, w: 1, h: 1, hasDet: false }, aux: { img: imgTex2, det: detTex2, w: 1, h: 1, hasDet: false } };
-    return { c, gl, P1, P2, P3, P4, sets, maskTex, A, B, maxTex, state: 'none', maskKey: null };
+    return { c, gl, P1, P2, P3, P4, P5, sets, maskTex, A, B, maxTex, state: 'none', maskKey: null };
   } catch (err) { console.warn('WebGL2 nicht verfügbar, nutze CPU:', err); return null; }
 }
 GL = initGL();
@@ -3462,9 +3528,114 @@ applyPanelSize();
 const dlg = $('#dlg');
 const canShareFiles = (() => { try { return !!(navigator.canShare && navigator.share && navigator.canShare({ files: [new File([''], 'x.jpg', { type: 'image/jpeg' })] })); } catch (_) { return false; } })();
 $('#dlgShare').hidden = !canShareFiles;
+// --- Größe ändern / Hochrechnen beim Speichern ---
+let expScale = 1, expAlgo = 'lanczos', expSharp = 0;
+const ALGO_ID = { nearest: 0, bilinear: 1, bicubic: 2, lanczos: 3 };
+const ALGO_HINT = {
+  nearest: 'Harte, sichtbare Pixel – ideal für Pixel-Art, Icons und Screenshots.',
+  bilinear: 'Weich und schnell, wirkt aber etwas unscharf.',
+  bicubic: 'Standard vieler Bildprogramme – guter Kompromiss aus Schärfe und Ruhe.',
+  lanczos: 'Am schärfsten für Fotos. An sehr harten Kanten können feine Säume entstehen.',
+  pixel: 'Scale2x/Scale3x: rundet Treppenstufen von Pixelgrafiken ab, ohne zu verwischen. Für Fotos ungeeignet.'
+};
+const scaleCap = () => matchMedia('(pointer: coarse)').matches ? 16e6 : 64e6;   // max. Pixel (Speicher)
+function effScale(w, h) {                           // tatsächlich nutzbarer Faktor (Speichergrenzen)
+  return expScale <= 1 ? Math.max(0.05, expScale) : Math.min(expScale, Math.sqrt(scaleCap() / (w * h)), 16384 / Math.max(w, h));
+}
 function updExpInfo() {
-  const d = exportDims();
-  $('#expInfo').textContent = `Größe: ${d.w} × ${d.h} px` + (S.holes.some(h => !h.hidden) && exportFmt === 'image/jpeg' ? ' · Gelöschte Bereiche werden bei JPEG weiß – für Transparenz PNG wählen.' : '');
+  const d = exportDims(), f = effScale(d.w, d.h), W = Math.max(1, Math.round(d.w * f)), H = Math.max(1, Math.round(d.h * f));
+  const capped = expScale > 1 && f < expScale - 1e-3;
+  $('#upOpts').hidden = !(f > 1.001);
+  if (document.activeElement !== $('#outW')) $('#outW').value = W;
+  $('#outH').textContent = '× ' + H + ' px';
+  $('#algoHint').textContent = ALGO_HINT[expAlgo];
+  $('#scaleChips').querySelectorAll('.chip').forEach(b => b.classList.toggle('on', Math.abs(+b.dataset.s - expScale) < 1e-3));
+  $('#algoChips').querySelectorAll('.chip').forEach(b => b.classList.toggle('on', b.dataset.a === expAlgo));
+  $('#sharpRow').hidden = expAlgo === 'nearest' || expAlgo === 'pixel';
+  $('#expInfo').textContent = `Größe: ${W} × ${H} px` + (capped ? ' (begrenzt – mehr Pixel schafft der Speicher dieses Geräts nicht sicher)' : '')
+    + (f > 1.001 ? ' · Texte und Ebenen werden in Zielgröße neu gezeichnet.' : '')
+    + (S.holes.some(h => !h.hidden) && exportFmt === 'image/jpeg' ? ' · Gelöschte Bereiche werden bei JPEG weiß – für Transparenz PNG wählen.' : '');
+}
+$('#scaleChips').querySelectorAll('.chip').forEach(b => b.onclick = () => { expScale = +b.dataset.s; updExpInfo(); });
+$('#algoChips').querySelectorAll('.chip').forEach(b => b.onclick = () => { expAlgo = b.dataset.a; updExpInfo(); });
+$('#outW').addEventListener('input', () => {
+  const d = exportDims(), v = +$('#outW').value;
+  if (v >= 16) { expScale = clamp(v / d.w, 0.05, 16); updExpInfo(); }
+});
+$('#outW').addEventListener('change', () => { $('#outW').blur(); updExpInfo(); });
+{ const sh = mkSlider({ label: 'Nachschärfen', min: 0, max: 100, value: 0, def: 0, onInput: v => { expSharp = v; } }); $('#sharpRow').appendChild(sh.row); }
+
+// Pixel-Art-Vergrößerung (Scale2x / Scale3x, „AdvMAME“): vergleicht exakte Nachbarfarben
+function scale2x(id) {
+  const w = id.width, h = id.height, s = new Uint32Array(id.data.buffer), out = new ImageData(w * 2, h * 2), d = new Uint32Array(out.data.buffer), W2 = w * 2;
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const P = s[y*w+x], A = y > 0 ? s[(y-1)*w+x] : P, B = x < w-1 ? s[y*w+x+1] : P, C = x > 0 ? s[y*w+x-1] : P, D = y < h-1 ? s[(y+1)*w+x] : P;
+    const o = 2*y*W2 + 2*x;
+    d[o] = C === A && C !== D && A !== B ? A : P;
+    d[o+1] = A === B && A !== C && B !== D ? B : P;
+    d[o+W2] = D === C && D !== B && C !== A ? C : P;
+    d[o+W2+1] = B === D && B !== A && D !== C ? D : P;
+  }
+  return out;
+}
+function scale3x(id) {
+  const w = id.width, h = id.height, s = new Uint32Array(id.data.buffer), out = new ImageData(w * 3, h * 3), d = new Uint32Array(out.data.buffer), W3 = w * 3;
+  const g = (x, y) => s[clamp(y, 0, h-1) * w + clamp(x, 0, w-1)];
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const A = g(x-1,y-1), B = g(x,y-1), C = g(x+1,y-1), D = g(x-1,y), E = g(x,y), F = g(x+1,y), G = g(x-1,y+1), H = g(x,y+1), I = g(x+1,y+1);
+    const o = 3*y*W3 + 3*x;
+    d[o]       = D === B && D !== H && B !== F ? D : E;
+    d[o+1]     = (D === B && D !== H && B !== F && E !== C) || (B === F && B !== D && F !== H && E !== A) ? B : E;
+    d[o+2]     = B === F && B !== D && F !== H ? F : E;
+    d[o+W3]    = (H === D && H !== F && D !== B && E !== A) || (D === B && D !== H && B !== F && E !== G) ? D : E;
+    d[o+W3+1]  = E;
+    d[o+W3+2]  = (B === F && B !== D && F !== H && E !== I) || (F === H && F !== B && H !== D && E !== C) ? F : E;
+    d[o+2*W3]  = H === D && H !== F && D !== B ? D : E;
+    d[o+2*W3+1]= (F === H && F !== B && H !== D && E !== G) || (H === D && H !== F && D !== B && E !== I) ? H : E;
+    d[o+2*W3+2]= F === H && F !== B && H !== D ? F : E;
+  }
+  return out;
+}
+// GPU-Hochrechnen in Kacheln (Ergebnis darf größer sein als die maximale Texturgröße)
+function glResample(src, W, H, algo, sharp) {
+  const { gl, c, P5 } = GL, u = P5.u;
+  glUploadCanvas(src, src.width, src.height, 'aux');
+  const out = document.createElement('canvas'); out.width = W; out.height = H;
+  const ox = out.getContext('2d');
+  const TSZ = Math.min(4096, GL.maxTex);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  gl.useProgram(P5.prog);
+  gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, GL.sets.aux.img);
+  gl.uniform2f(u.uSrc, src.width, src.height); gl.uniform2f(u.uDst, W, H);
+  gl.uniform1i(u.uAlgo, algo); gl.uniform1f(u.uSharp, sharp);
+  for (let ty = 0; ty < H; ty += TSZ) for (let tx = 0; tx < W; tx += TSZ) {
+    const tw = Math.min(TSZ, W - tx), th = Math.min(TSZ, H - ty);
+    if (c.width !== tw || c.height !== th) { c.width = tw; c.height = th; }
+    gl.viewport(0, 0, tw, th);
+    gl.uniform2f(u.uOff, tx, ty); gl.uniform1f(u.uTileH, th);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    ox.drawImage(c, tx, ty);
+  }
+  return out;
+}
+function upscaleCanvas(src, W, H, algo, sharp) {
+  if (algo === 'pixel') {                            // ganze Faktoren mit Scale2x/3x, Rest mit nächstem Nachbarn
+    const n = Math.floor(W / src.width + 1e-6);
+    const steps = n === 2 ? [2] : n === 3 ? [3] : n === 4 || n === 5 ? [2, 2] : n >= 6 ? [3, 2] : [];
+    if (steps.length) {
+      let id = src.getContext('2d').getImageData(0, 0, src.width, src.height);
+      for (const st of steps) id = st === 2 ? scale2x(id) : scale3x(id);
+      const cv = document.createElement('canvas'); cv.width = id.width; cv.height = id.height; cv.getContext('2d').putImageData(id, 0, 0);
+      if (cv.width === W && cv.height === H) return cv;
+      src = cv;
+    }
+    algo = 'nearest'; sharp = 0;
+  }
+  if (GL) return glResample(src, W, H, ALGO_ID[algo], sharp);
+  const out = document.createElement('canvas'); out.width = W; out.height = H;
+  const x = out.getContext('2d'); x.imageSmoothingEnabled = algo !== 'nearest'; x.imageSmoothingQuality = 'high';
+  x.drawImage(src, 0, 0, W, H);
+  return out;
 }
 $('#btnSave').onclick = () => { updExpInfo(); dlg.showModal(); };
 $('#dlgCancel').onclick = () => dlg.close();
@@ -3512,8 +3683,12 @@ async function renderExport() {
     process(data, pw, ph, S.p, det, out);
     sctx.putImageData(out, 0, 0);
   }
+  // Größe ändern: Foto mit gewähltem Verfahren hochrechnen; Texte/Ebenen werden danach in Zielgröße gezeichnet
+  const f = effScale(pw, ph), K = k * f;
+  let proc = { canvas: srcCv, bx, by, k };
+  if (f > 1.001) proc = { canvas: upscaleCanvas(srcCv, Math.round(pw * f), Math.round(ph * f), expAlgo, expSharp / 100 * 1.5), bx, by, k: K };
   // Ebenen mit eigenem Look in Export-Auflösung berechnen
-  const layers = new Map(), proc = { canvas: srcCv, bx, by, k };
+  const layers = new Map();
   let orig = null;                                   // unbearbeitetes Foto (nur für Ausschnitte ohne Foto-Look)
   for (const ob of S.objs) {
     if (ob.hidden || !hasLook(ob)) continue;
@@ -3521,15 +3696,17 @@ async function renderExport() {
       const oc = document.createElement('canvas'); oc.width = pw; oc.height = ph; oc.getContext('2d').putImageData(data, 0, 0);
       orig = { canvas: oc, bx, by, k };
     }
-    const r = processLayer(ob, k, proc, orig || proc);
+    const r = processLayer(ob, K, proc, orig || proc);
     if (r) layers.set(ob.id, r);
   }
-  const cc = document.createElement('canvas'); cc.width = cw; cc.height = ch;
-  drawScene(cc.getContext('2d'), { ox: -cx, oy: -cy, k }, { canvas: srcCv, bx, by, k, layers }, { full: false, vignette: true, holes: 'clear', objects: true });
+  const OW = Math.max(1, Math.round(cw * f)), OH = Math.max(1, Math.round(ch * f));
+  const cc = document.createElement('canvas'); cc.width = OW; cc.height = OH;
+  const cctx = cc.getContext('2d'); cctx.imageSmoothingQuality = 'high';
+  drawScene(cctx, { ox: -cx * f, oy: -cy * f, k: K }, { ...proc, layers }, { full: false, vignette: true, holes: 'clear', objects: true });
   let final = cc;
   if (exportFmt === 'image/jpeg') {
-    final = document.createElement('canvas'); final.width = cw; final.height = ch;
-    const fx = final.getContext('2d'); fx.fillStyle = '#fff'; fx.fillRect(0, 0, cw, ch); fx.drawImage(cc, 0, 0);
+    final = document.createElement('canvas'); final.width = OW; final.height = OH;
+    const fx = final.getContext('2d'); fx.fillStyle = '#fff'; fx.fillRect(0, 0, OW, OH); fx.drawImage(cc, 0, 0);
   }
   const blob = await new Promise(res => final.toBlob(res, exportFmt, q.value / 100));
   if (!blob) throw new Error('toBlob');
