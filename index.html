@@ -47,12 +47,13 @@ main{flex:1;display:flex;flex-direction:column;min-height:0}
 .startbtns{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
 .camstart{display:flex;align-items:center;gap:6px;height:38px}
 /* Kameramodus */
-#camCtl{position:absolute;left:0;right:0;bottom:14px;display:none;justify-content:center;align-items:center;gap:40px;pointer-events:none}
+#camCtl{position:absolute;left:0;right:0;bottom:10px;display:none;justify-content:center;align-items:center;gap:32px;pointer-events:none}
 #camCtl button{pointer-events:auto}
-#camShot{width:70px;height:70px;border-radius:50%;border:4px solid #fff;background:rgba(255,255,255,.18);display:grid;place-items:center;box-shadow:0 2px 12px rgba(0,0,0,.4)}
-#camShot span{width:54px;height:54px;border-radius:50%;background:#fff;transition:transform .1s}
+#camShot{width:56px;height:56px;border-radius:50%;border:3px solid #fff;background:rgba(255,255,255,.18);display:grid;place-items:center;box-shadow:0 2px 12px rgba(0,0,0,.4)}
+#camShot span{width:44px;height:44px;border-radius:50%;background:#fff;transition:transform .1s}
 #camShot:active span{transform:scale(.9)}
-.cbtn{width:46px;height:46px;border-radius:50%;background:rgba(0,0,0,.55);display:grid;place-items:center;color:#fff;border:1px solid rgba(255,255,255,.15)}
+.cbtn{width:40px;height:40px;border-radius:50%;background:rgba(0,0,0,.55);display:grid;place-items:center;color:#fff;border:1px solid rgba(255,255,255,.15)}
+.cbtn svg{width:18px;height:18px}
 #camFlash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none;transition:opacity .35s}
 body.cam #camCtl{display:flex}
 body.cam #empty,body.cam #zoomBadge{display:none !important}
@@ -63,7 +64,12 @@ body.cam #camFs{display:grid}
 /* Vollbild-Live: nur die Bühne, Bedienelemente schweben über dem Bild */
 body.camfs header,body.camfs aside{display:none !important}
 body.camfs #stage{background:#000}
-body.camfs #camCtl{bottom:calc(18px + env(safe-area-inset-bottom))}
+body.camfs #camCtl{bottom:calc(18px + env(safe-area-inset-bottom));gap:40px}
+body.camfs #camShot{width:70px;height:70px;border-width:4px}
+body.camfs #camShot span{width:54px;height:54px}
+body.camfs .cbtn{width:46px;height:46px}
+/* Kameramodus am Handy: Einstellungen inkl. Tabs nur ¼ der Höhe */
+@media (max-width:899px){body.cam .panels{max-height:calc(25dvh - 56px);min-height:92px;padding-top:8px}body.cam .panels .seg{margin-bottom:8px}}
 #camLooks{position:absolute;left:0;right:0;bottom:calc(108px + env(safe-area-inset-bottom));display:none;flex-direction:column;align-items:center;gap:8px;pointer-events:none}
 body.camfs #camLooks{display:flex}
 #camLooks .seg{pointer-events:auto;background:rgba(0,0,0,.5);border-color:rgba(255,255,255,.15);margin:0}
@@ -2933,15 +2939,40 @@ function drawCam() {
     return;
   }
   const w = camOut.width, h = camOut.height, fs = cam.fs;
-  const top = fs ? 0 : 14, side = fs ? 0 : 14, bottom = fs ? 0 : 100;   // normal: unten Platz für den Auslöser
-  const kFit = Math.max(0.01, Math.min((cw - 2 * side) / w, (ch - top - bottom) / h));
-  const k = fs && cam.fill ? Math.max(cw / w, ch / h) : kFit;
-  const R = { x: (cw - w * k) / 2, y: top + (ch - top - bottom - h * k) / 2, w: w * k, h: h * k };
+  let k, R;
+  if (fs) {
+    k = cam.fill ? Math.max(cw / w, ch / h) : Math.min(cw / w, ch / h);
+    R = { x: (cw - w * k) / 2, y: (ch - h * k) / 2, w: w * k, h: h * k };
+    camCtlLayout('fs');
+  } else {
+    // Ohne Platzreserve einpassen; reicht der Rand neben dem Bild für die Buttons → Spalte rechts, sonst Streifen unten
+    const m = 8, kFree = Math.max(0.01, Math.min((cw - 2 * m) / w, (ch - 2 * m) / h)), gap = (cw - w * kFree) / 2;
+    if (gap >= 64) {                             // Auslöser 56 px + etwas Luft
+      k = kFree;
+      R = { x: (cw - w * k) / 2, y: (ch - h * k) / 2, w: w * k, h: h * k };
+      camCtlLayout('side', R.x + R.w + gap / 2);
+    } else {
+      const bottom = 70;
+      k = Math.max(0.01, Math.min((cw - 2 * m) / w, (ch - m - bottom) / h));
+      R = { x: (cw - w * k) / 2, y: m + (ch - m - bottom - h * k) / 2, w: w * k, h: h * k };
+      camCtlLayout('bottom');
+    }
+  }
   lay = { T: { k, ox: R.x, oy: R.y }, rect: R, k0: k, region: { x: 0, y: 0, w, h }, cw, ch };
   vctx.imageSmoothingQuality = 'high';
   vctx.drawImage(camOut, R.x, R.y, R.w, R.h);
   drawVignette(vctx, R.x, R.y, R.w, R.h, S.p.vignette);
   if (!fs && tab === 'effects' && subs.effects === 'tilt') drawTiltOverlay();
+}
+// Kamera-Buttons positionieren: 'side' = senkrechte Spalte (Mitte bei x), 'bottom' = Streifen unten, 'fs' = Vollbild (CSS)
+let camCtlKey = '';
+function camCtlLayout(mode, x) {
+  const key = mode + (x ? Math.round(x) : '');
+  if (key === camCtlKey) return;
+  camCtlKey = key;
+  const st = $('#camCtl').style;
+  if (mode === 'side') Object.assign(st, { left: x + 'px', right: 'auto', top: '50%', bottom: 'auto', transform: 'translate(-50%,-50%)', flexDirection: 'column', gap: '22px' });
+  else Object.assign(st, { left: '', right: '', top: '', bottom: '', transform: '', flexDirection: '', gap: '' });
 }
 function camLoop() {
   if (!cam.on) return;
