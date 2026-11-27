@@ -89,10 +89,27 @@ body.camfs #toast{bottom:calc(200px + env(safe-area-inset-bottom))}
 .drop .save{margin:0}
 body.dragging .drop{border-color:var(--accent);background:rgba(242,184,75,.06)}
 
-aside{background:var(--panel);border-top:1px solid var(--line);display:flex;flex-direction:column}
+aside{background:var(--panel);border-top:1px solid var(--line);display:flex;flex-direction:column;position:relative}
+/* Griff: Handy = oben (Höhe ziehen), Computer = linker Rand (Breite ziehen) */
+#grip{flex:none;height:18px;margin-bottom:-6px;display:flex;align-items:center;justify-content:center;cursor:ns-resize;touch-action:none;position:relative;z-index:2}
+#grip span{width:40px;height:4px;border-radius:2px;background:#3a3d44;transition:background .15s}
+#grip:hover span,#grip.drag span{background:var(--accent)}
+.panels.collapsed{padding-top:0 !important;padding-bottom:0 !important;overflow:hidden}
+/* Vollbild-Vorschau im Bearbeiten-Modus */
+body.viewfs header,body.viewfs aside{display:none !important}
+body.viewfs #stage{background:#000}
+#viewFsExit{position:absolute;top:calc(12px + env(safe-area-inset-top));right:12px;display:none;z-index:3}
+body.viewfs #viewFsExit{display:grid}
 body.noimg aside{opacity:.45;pointer-events:none}
 .panels{max-height:40vh;overflow-y:auto;padding:12px 16px 6px;-webkit-overflow-scrolling:touch}
 .panel[hidden],.sub[hidden],[hidden]{display:none !important}
+#targetBar{display:flex;align-items:center;gap:8px;margin:0 0 10px;padding:6px 6px 6px 10px;border-radius:10px;
+  background:rgba(242,184,75,.12);border:1px solid rgba(242,184,75,.45);font-size:13px;color:#f5d48f}
+#targetBar .tb-txt{flex:1;min-width:0;display:flex;align-items:center;gap:6px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+#targetBar svg{width:16px;height:16px;flex:none}
+#targetBar b{overflow:hidden;text-overflow:ellipsis;color:#fff;font-weight:600}
+.tool.accentbtn{border-color:rgba(242,184,75,.6);color:#f5d48f}
+#targetDone{flex:none;padding:6px 12px;border-radius:8px;background:var(--accent);color:var(--accent-ink);font-weight:650;font-size:13px}
 .tabs{display:flex;border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom)}
 .tab{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;gap:3px;padding:9px 1px 8px;color:var(--muted);font-size:11px;white-space:nowrap}
 .tab.on{color:var(--accent)}
@@ -102,6 +119,8 @@ body.noimg aside{opacity:.45;pointer-events:none}
   aside{width:360px;border-top:0;border-left:1px solid var(--line)}
   .tabs{order:-1;border-top:0;border-bottom:1px solid var(--line);padding-bottom:0}
   .panels{max-height:none;flex:1;padding:16px 18px}
+  #grip{position:absolute;left:-5px;top:0;bottom:0;width:10px;height:auto;margin:0;cursor:ew-resize}
+  #grip span{width:4px;height:44px}
 }
 
 /* Segment-Umschalter */
@@ -217,6 +236,9 @@ dialog .chips{margin-bottom:14px}
   <button class="ib" id="btnRedo" title="Wiederholen (Strg+Umschalt+Z)" aria-label="Wiederholen" disabled>
     <svg viewBox="0 0 24 24"><path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg>
   </button>
+  <button class="ib" id="btnFs" title="Vollbild-Vorschau (F)" aria-label="Vollbild-Vorschau" disabled>
+    <svg viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M16 21h3a2 2 0 0 0 2-2v-3"/></svg>
+  </button>
   <button class="ib" id="btnCompare" title="Vorher/Nachher-Vergleich ein/aus (gedrückt halten: ganzes Original)" aria-label="Vorher/Nachher-Vergleich" disabled>
     <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M12 3v18"/><path d="M12 3h7a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-7z" fill="currentColor" stroke="none" opacity=".35"/></svg>
   </button>
@@ -244,6 +266,7 @@ dialog .chips{margin-bottom:14px}
       <div class="lookrow" id="camLookFx" hidden></div>
     </div>
     <div id="camLabel"></div>
+    <button class="cbtn" id="viewFsExit" title="Vollbild beenden (Esc)" aria-label="Vollbild beenden"><svg viewBox="0 0 24 24"><path d="M8 3v3a2 2 0 0 1-2 2H3M21 8h-3a2 2 0 0 1-2-2V3M3 16h3a2 2 0 0 1 2 2v3M16 21v-3a2 2 0 0 1 2-2h3"/></svg></button>
     <div id="empty">
       <div class="drop">
         <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/></svg>
@@ -254,7 +277,12 @@ dialog .chips{margin-bottom:14px}
   </div>
 
   <aside>
+    <div id="grip" title="Ziehen: Größe ändern · Antippen: ein-/ausklappen" role="separator" aria-label="Größe des Einstellungsbereichs"><span></span></div>
     <div class="panels">
+      <div id="targetBar" hidden>
+        <span class="tb-txt"><svg viewBox="0 0 24 24"><path d="m12 2 10 5-10 5L2 7z"/><path d="m2 12 10 5 10-5"/><path d="m2 17 10 5 10-5"/></svg>Ebene: <b id="targetName"></b></span>
+        <button id="targetDone">Fertig</button>
+      </div>
       <!-- Zuschnitt -->
       <section class="panel" data-panel="crop" hidden>
         <div class="label">SEITENVERHÄLTNIS</div>
@@ -296,6 +324,7 @@ dialog .chips{margin-bottom:14px}
           <button class="reset" id="fxReset" hidden>Effekt-Einstellungen zurücksetzen</button>
         </div>
         <div class="sub" data-sub="tilt" hidden>
+          <div class="note" id="tiltLayerNote" hidden>Tilt-Shift wirkt nur auf das ganze Foto. Tippe oben auf „Fertig“, um ihn einzustellen.</div>
           <div class="chips" id="tsMode">
             <button class="chip on" data-mode="linear">Linear</button><button class="chip" data-mode="radial">Radial</button>
           </div>
@@ -494,6 +523,8 @@ const assets = new Map();                      // eingefügte Bilder (nicht im V
 let img = null, fileName = 'bild', imgUrl = null;
 let base = null, baseData = null, detCache = null, detRG = null, R2 = 8;
 const processed = document.createElement('canvas');
+const baseOut = document.createElement('canvas');   // Ergebnis der GPU-Vorschau des Fotos (GL.c wird auch für Ebenen genutzt)
+let baseKey = '', baseVer = 0;
 let pctx = null, outData = null;
 let tab = 'adjust', cropMode = false, aspect = 'free', showOrig = false;
 const split = { on: false, x: 0.5 };           // Vorher/Nachher-Teilung (x relativ zur sichtbaren Bildbreite)
@@ -773,6 +804,7 @@ const float TAU = 6.28318531;
 float lum(vec3 c) { return dot(c, vec3(0.299, 0.587, 0.114)); }
 vec3 samp(vec2 p, float lod) { return textureLod(uTex, vec2(p.x, uSize.y - p.y) / uSize, lod).rgb; }
 vec3 sampG(vec2 p) { return texture(uTex, vec2(p.x, uSize.y - p.y) / uSize).rgb; }
+float sampA(vec2 p, float lod) { return textureLod(uTex, vec2(p.x, uSize.y - p.y) / uSize, lod).a; }
 float hash(vec2 p) {
   uvec2 q = uvec2(ivec2(floor(p)) + 32768) * uvec2(1597334673u, 3812015801u);
   uint n = (q.x ^ q.y) * 1597334673u;
@@ -790,6 +822,7 @@ void main() {
   vec2 fc = gl_FragCoord.xy;
   vec4 src = texelFetch(uTex, ivec2(fc), 0);
   vec3 col = src.rgb;
+  float al = src.a;                        // Transparenz (bei verschiebenden Effekten von der Quellstelle)
   vec2 p = vec2(fc.x, uSize.y - fc.y), rel = p - uCrop.xy;
   float L = min(uCrop.z, uCrop.w), S = max(1.0, uScale);
   vec2 C = uCrop.xy + uCrop.zw * 0.5;
@@ -805,6 +838,7 @@ void main() {
     if (hc < 0.14 * c) q += (vec2(hash(cell + 31.0), hash(cell + 57.0)) - 0.5) * L * vec2(0.25, 0.06);
     float off = b * 0.015 * L * (0.6 + 0.8 * hb);
     col = vec3(samp(q + vec2(off, 0.0), 0.0).r, samp(q, 0.0).g, samp(q - vec2(off, 0.0), 0.0).b);
+    al = max(sampA(q, 0.0), max(sampA(q + vec2(off, 0.0), 0.0), sampA(q - vec2(off, 0.0), 0.0)));
     if (hc < 0.05 * c) col = hc < 0.025 * c ? 1.0 - col : col.brg;
     col *= 1.0 - d * 0.4 * (0.5 + 0.5 * sin(p.y * 3.14159 / (1.5 * S)));
   }
@@ -816,6 +850,7 @@ void main() {
     float tnoise = hash(vec2(floor(rel.y / S), seed + 5.0));
     vec2 q = p + vec2(wob + tband * b * (tnoise - 0.5) * 0.04 * L, 0.0);
     vec3 sharp = samp(q, 0.0);
+    al = sampA(q, 0.0);
     float bw = a * 0.02 * L + 0.5, blod = max(0.0, log2(bw / 4.0));
     vec3 ch = vec3(0.0);
     for (int i = 0; i < 6; i++) ch += samp(q + vec2((float(i) - 1.5) * bw / 3.0 + a * 0.008 * L, 0.0), blod);
@@ -832,6 +867,7 @@ void main() {
     float s = mix(0.008, 0.09, a * a) * L + 1.0;
     vec2 ci = floor(rel / s);
     vec3 cc = samp(uCrop.xy + (ci + 0.5) * s, max(0.0, log2(s * 0.6)));
+    float ca = sampA(uCrop.xy + (ci + 0.5) * s, max(0.0, log2(s * 0.6)));
     if (d > 0.0) { float n = mix(12.0, 3.0, d); cc = floor(cc * n + 0.5) / n; }
     vec2 f = (rel - ci * s) / s - 0.5;
     float hw = 0.5 - c * 0.12, rr = b * hw;
@@ -839,6 +875,7 @@ void main() {
     float dd = length(max(qd, 0.0)) + min(max(qd.x, qd.y), 0.0) - rr;
     float m = (c <= 0.0 && b <= 0.0) ? 1.0 : 1.0 - smoothstep(-1.0 / s, 1.0 / s, dd);
     col = mix(cc * 0.22, cc * (1.0 + b * 0.25 * (-f.x - f.y)), m);
+    al = ca < 0.99 ? step(0.35, ca) * ((c <= 0.0 && b <= 0.0) ? 1.0 : m) : 1.0;   // Foto: Fugen bleiben deckend
   }
   else if (uFx == 4) {                     // ÖLGEMÄLDE: Kuwahara-Filter mit 8 Sektoren + Leinwand
     float r = mix(2.0, 14.0, a) * uScale + 1.0, lod = max(0.0, log2(r / 6.0)), q = mix(1.5, 8.0, b);
@@ -912,7 +949,8 @@ void main() {
     float r = length(v), n = floor(mix(3.0, 16.0, a) + 0.5), seg = TAU / n;
     float an = atan(v.y, v.x) + b * TAU + (d - 0.5) * 8.0 * r / L;
     an = mod(an, seg); an = min(an, seg - an);
-    col = sampG(mirrorCrop(C + vec2(cos(an), sin(an)) * r * mix(1.0, 0.35, c)));
+    vec2 kq = mirrorCrop(C + vec2(cos(an), sin(an)) * r * mix(1.0, 0.35, c));
+    col = sampG(kq); al = sampA(kq, 0.0);
   }
   else if (uFx == 10 || uFx == 11) {       // MINI-PLANET / TUNNEL: Bild um die Mitte gewickelt
     vec2 v = p - C;
@@ -927,11 +965,12 @@ void main() {
     float over = max(-yRaw, yRaw - 1.0);
     float lod = log2(max(max(tang, rad), 1.0)) + (over > 0.0 ? log2(1.0 + over * 40.0) : 0.0);
     col = samp(uCrop.xy + vec2(u, yN) * uCrop.zw, lod);
+    al = sampA(uCrop.xy + vec2(u, yN) * uCrop.zw, lod);
     float sw = d * 0.2, sd = min(u, 1.0 - u);
     vec3 other = samp(uCrop.xy + vec2(1.0 - u, yN) * uCrop.zw, lod);   // Gegenseite → Naht ausblenden
     if (sw > 0.0) col = mix(col, other, 0.5 * (1.0 - smoothstep(0.0, sw, sd)));
   }
-  o = vec4(clamp(col, 0.0, 1.0), src.a);
+  o = vec4(clamp(col, 0.0, 1.0), al);
 }`;
 const FRAG_FINAL = `#version 300 es
 precision highp float;
@@ -943,16 +982,17 @@ uniform bool uUseMask;
 uniform vec2 uTaps[40];
 out vec4 o;
 // Scheibenförmige Unschärfe mit Radius r (Mipmaps vorgefiltert → glatt auch bei großen Radien)
-vec3 disc(vec2 fc, float r) {
+vec4 disc(vec2 fc, float r) {
   float lod = max(0.0, log2(r * 0.4));
-  vec3 acc = vec3(0.0);
-  for (int i = 0; i < 40; i++) acc += textureLod(uTex, (fc + uTaps[i] * r) / uSize, lod).rgb;
+  vec4 acc = vec4(0.0);
+  for (int i = 0; i < 40; i++) acc += textureLod(uTex, (fc + uTaps[i] * r) / uSize, lod);
   return acc / 40.0;
 }
 void main() {
   vec2 fc = gl_FragCoord.xy;
   vec4 src = texelFetch(uTex, ivec2(fc), 0);
   vec3 c = src.rgb;
+  float al = src.a;                        // Transparenz wandert bei Unschärfe mit (wichtig für Ebenen)
   float r = uGR;                           // Weichzeichnen (ganzes Bild)
   if (uR > 0.0) {                          // Tilt-Shift: Unschärfe wächst mit Abstand zum Fokus
     vec2 pimg = vec2(fc.x, uSize.y - fc.y);
@@ -963,15 +1003,16 @@ void main() {
     r = max(r, uMaskR * textureLod(uMask, vec2(fc.x / uSize.x, 1.0 - fc.y / uSize.y), uMaskLod).r);
   if (uMR > 0.5) {                         // Bewegungsunschärfe entlang einer Richtung
     float lod = max(0.0, log2(uMR / 12.0));
-    vec3 acc = vec3(0.0);
-    for (int i = 0; i < 24; i++) { float t = (float(i) + 0.5) / 12.0 - 1.0; acc += textureLod(uTex, (fc + uMD * t * uMR) / uSize, lod).rgb; }
-    c = acc / 24.0;
+    vec4 acc = vec4(0.0);
+    for (int i = 0; i < 24; i++) { float t = (float(i) + 0.5) / 12.0 - 1.0; acc += textureLod(uTex, (fc + uMD * t * uMR) / uSize, lod); }
+    c = acc.rgb / 24.0; al = acc.a / 24.0;
   }
-  if (r > 0.5) c = mix(c, disc(fc, r), smoothstep(0.5, 1.5, r));
+  if (r > 0.5) { vec4 d = disc(fc, r); float t = smoothstep(0.5, 1.5, r); c = mix(c, d.rgb, t); al = mix(al, d.a, t); }
   if (uGlow > 0.0) {                       // Glanz (Soft-Glow / Orton): weiche Kopie aufhellend überlagern
-    vec3 b = disc(fc, uGlowR);
-    c = mix(c, 1.0 - (1.0 - c) * (1.0 - b), uGlow * 0.75);
+    vec4 b = disc(fc, uGlowR);
+    c = mix(c, 1.0 - (1.0 - c) * (1.0 - b.rgb), uGlow * 0.75);
     c = mix(c, c * c * (3.0 - 2.0 * c), uGlow * 0.3);
+    al = max(al, b.a * uGlow * 0.85);      // Leuchten reicht über den Rand hinaus (z. B. um Text)
   }
   if (uGr > 0.0) {                         // Körnung
     uvec2 u = uvec2(fc);
@@ -979,7 +1020,7 @@ void main() {
     h ^= h >> 16; h *= 0x7feb352du; h ^= h >> 15; h *= 0x846ca68bu; h ^= h >> 16;
     c += (float(h) / 4294967296.0 - 0.5) * uGr / 255.0;
   }
-  o = vec4(clamp(c, 0.0, 1.0), src.a);
+  o = vec4(clamp(c, 0.0, 1.0), al);
 }`;
 
 let GL = null;
@@ -1026,6 +1067,10 @@ function initGL() {
     gl.generateMipmap(gl.TEXTURE_2D);
     const imgTex = mkTex(gl.NEAREST, gl.NEAREST);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(4));
+    const imgTex2 = mkTex(gl.NEAREST, gl.NEAREST);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(4));
+    const detTex2 = mkTex(gl.NEAREST, gl.NEAREST);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RG32F, 1, 1, 0, gl.RG, gl.FLOAT, new Float32Array(2));
     const detTex = mkTex(gl.NEAREST, gl.NEAREST);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RG32F, 1, 1, 0, gl.RG, gl.FLOAT, new Float32Array(2));
     const target = () => ({ t: mkTex(gl.LINEAR_MIPMAP_LINEAR, gl.LINEAR), fb: gl.createFramebuffer(), w: 0, h: 0 });
@@ -1039,7 +1084,9 @@ function initGL() {
     const vp = gl.getParameter(gl.MAX_VIEWPORT_DIMS);
     const maxTex = Math.min(gl.getParameter(gl.MAX_TEXTURE_SIZE), vp[0], vp[1]);
     c.addEventListener('webglcontextlost', e => { e.preventDefault(); GL = null; $('#glNote').hidden = false; schedule(); });
-    return { c, gl, P1, P2, P3, P4, imgTex, detTex, maskTex, A, B, maxTex, w: 1, h: 1, state: 'none', hasDet: false, maskKey: null };
+    // Zwei Textursätze: 'base' = Foto (bleibt hochgeladen), 'aux' = Ebenen, Vorschaukacheln, Kamera, Export
+    const sets = { base: { img: imgTex, det: detTex, w: 1, h: 1, hasDet: false }, aux: { img: imgTex2, det: detTex2, w: 1, h: 1, hasDet: false } };
+    return { c, gl, P1, P2, P3, P4, sets, maskTex, A, B, maxTex, state: 'none', maskKey: null };
   } catch (err) { console.warn('WebGL2 nicht verfügbar, nutze CPU:', err); return null; }
 }
 GL = initGL();
@@ -1053,33 +1100,33 @@ function glTarget(T, w, h) {
   gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, T.t, 0);
   T.w = w; T.h = h;
 }
-function glUpload(data, w, h, rg) {
-  const { gl } = GL;
-  gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, GL.imgTex);
+function glUpload(data, w, h, rg, set = 'base') {
+  const { gl } = GL, T = GL.sets[set];
+  gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, T.img);
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, data);
-  GL.w = w; GL.h = h; GL.hasDet = false;
-  if (rg) glUploadDet(rg, w, h);
+  T.w = w; T.h = h; T.hasDet = false;
+  if (rg) glUploadDet(rg, w, h, set);
 }
-function glUploadDet(rg, w, h) {
-  const { gl } = GL;
-  gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, GL.detTex);
+function glUploadDet(rg, w, h, set = 'base') {
+  const { gl } = GL, T = GL.sets[set];
+  gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, T.det);
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RG32F, w, h, 0, gl.RG, gl.FLOAT, rg);
-  GL.hasDet = true;
+  T.hasDet = true;
 }
 const comicOn = p => p.inkEdges > 0 || p.posterize > 0 || p.halftone > 0 || p.comicPop > 0 || p.comicPaper > 0 || p.hatch > 0;
 
-function glRun(p, geo, scale) {
-  const { gl, c, P1, P2, P3, P4, A, B } = GL, w = GL.w, h = GL.h;
+function glRun(p, geo, scale, set = 'base') {
+  const { gl, c, P1, P2, P3, P4, A, B } = GL, TS = GL.sets[set], w = TS.w, h = TS.h;
   if (c.width !== w || c.height !== h) { c.width = w; c.height = h; }
   gl.viewport(0, 0, w, h);
   // Pass 1: Licht, Farbe, Struktur
   glTarget(A, w, h);
   gl.bindFramebuffer(gl.FRAMEBUFFER, A.fb);
   gl.useProgram(P1.prog);
-  gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, GL.imgTex);
-  gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, GL.detTex);
+  gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, TS.img);
+  gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, TS.det);
   const u = P1.u, ct = p.contrast / 100;
-  gl.uniform1i(u.uUseDet, GL.hasDet && (p.structure !== 0 || p.sharpness !== 0) ? 1 : 0);
+  gl.uniform1i(u.uUseDet, TS.hasDet && (p.structure !== 0 || p.sharpness !== 0) ? 1 : 0);
   gl.uniform1f(u.uGamma, Math.pow(2, -p.brightness / 100 * 1.1));
   gl.uniform1f(u.uCf, ct >= 0 ? 1 + ct * 1.6 : 1 + ct * 0.85);
   gl.uniform1f(u.uSk, p.sharpness / 100 * 2.5);
@@ -1223,6 +1270,7 @@ function rebuildBase() {
   base = orientedCanvas(img, GL ? PREVIEW_MAX_GPU : PREVIEW_MAX_CPU);
   baseData = base.getContext('2d').getImageData(0, 0, base.width, base.height);
   processed.width = base.width; processed.height = base.height;
+  baseOut.width = base.width; baseOut.height = base.height; baseKey = '';
   pctx = processed.getContext('2d');
   outData = pctx.createImageData(base.width, base.height);
   detCache = null; detRG = null;
@@ -1244,6 +1292,10 @@ function runProcess() {
   if (cam.on || !base) return;
   const needDet = S.p.structure !== 0 || S.p.sharpness !== 0;
   if (needDet) ensureDet();
+  // Nur neu rechnen, wenn sich am Foto-Look etwas geändert hat (nicht bei reinen Ebenen-Änderungen)
+  const key = JSON.stringify([S.p, S.fx, S.ts, S.crop, S.blurs, base.width, base.height, !!detRG, !!GL]);
+  if (key === baseKey && (!GL || GL.state === 'preview')) return;
+  baseKey = key; baseVer++;
   if (GL) {
     if (GL.state !== 'preview') { glUpload(baseData.data, base.width, base.height, detRG); GL.state = 'preview'; }
     const geo = tsGeom(0, 0, 1);
@@ -1253,12 +1305,13 @@ function runProcess() {
       geo.mask = true;
     }
     glRun(S.p, geo, 1);
+    const bx = baseOut.getContext('2d'); bx.clearRect(0, 0, baseOut.width, baseOut.height); bx.drawImage(GL.c, 0, 0);
     return;
   }
   process(baseData, base.width, base.height, S.p, needDet ? detCache : null, outData);
   pctx.putImageData(outData, 0, 0);
 }
-const previewSrc = () => ({ canvas: GL ? GL.c : processed, bx: 0, by: 0, k: 1 });
+const previewSrc = () => ({ canvas: GL ? baseOut : processed, bx: 0, by: 0, k: 1 });
 
 // Zeichnet einen Ausschnitt einer Quelle; Quellrechteck wird auf die Quelle begrenzt
 function drawSrc(ctx, src, x, y, w, h, dx, dy, dw, dh) {
@@ -1329,7 +1382,7 @@ function render() {
   if (!base) { sp.style.display = 'none'; return; }
   const bw = base.width, bh = base.height, c = S.crop;
   const region = cropMode ? { x: 0, y: 0, w: bw, h: bh } : { x: c.x*bw, y: c.y*bh, w: c.w*bw, h: c.h*bh };
-  const pad = cropMode ? 26 : 14;
+  const pad = cropMode ? 26 : viewFs ? 0 : 14;
   const k0 = Math.max(0.01, Math.min((cw - 2*pad) / region.w, (ch - 2*pad) / region.h));
   // Zoom & Verschieben (nicht im Zuschnitt-Modus); Bild bleibt immer im Sichtbereich
   const zoomable = !cropMode, k = k0 * (zoomable ? vz.z : 1);
@@ -1344,6 +1397,7 @@ function render() {
   const zb = $('#zoomBadge');
   zb.hidden = !(zoomable && vz.z > 1.01);
   zb.textContent = vz.z.toFixed(1).replace('.', ',') + '× · Einpassen';
+  if (!showOrig) processLayers();
   const src = showOrig ? { canvas: base, bx: 0, by: 0, k: 1 } : previewSrc();
   drawScene(vctx, T, src, { full: cropMode, vignette: !cropMode && !showOrig, holes: showOrig ? 'none' : 'checker', objects: !showOrig });
   // Vorher/Nachher-Teilung: links das Original über das bearbeitete Bild legen
@@ -1481,6 +1535,14 @@ function drawObject(ctx, ob, src) {
   ctx.scale(ob.s * (ob.mirror ? -1 : 1), ob.s);
   ctx.globalAlpha = ob.op;
   ctx.globalCompositeOperation = ob.blend || 'source-over';
+  // Ebene mit eigenem Look → fertig berechnetes Bild verwenden (Export: eigene, hochaufgelöste Fassung)
+  const lc = hasLook(ob) ? (src.layers ? src.layers.get(ob.id) : layerCache.get(ob.id)) : null;
+  if (lc) {
+    if (ob.type === 'cut') { const g = cutGeom(ob), path = new Path2D(); polyPath(path, ob.pts, bw, bh, -g.cx, -g.cy); ctx.clip(path); }
+    ctx.drawImage(lc.cv, lc.bx, lc.by, lc.bw, lc.bh);
+    ctx.restore();
+    return;
+  }
   if (ob.type === 'text') drawText(ctx, ob, U);
   else if (ob.type === 'image') {
     const a = assets.get(ob.asset);
@@ -1533,6 +1595,110 @@ function objCorners(ob) {
   return { c: { x: cx, y: cy }, tl: P(-hw, -hh), tr: P(hw, -hh), br: P(hw, hh), bl: P(-hw, hh) };
 }
 
+/* =====================================================================
+   6b. EBENEN MIT EIGENEM LOOK (Einstellungen & Effekte je Ebene)
+   ===================================================================== */
+// ob.look = { p: {...Regler}, fx: 'none'|..., inherit: true }  (inherit: Ausschnitt übernimmt den Foto-Look)
+let target = null;                                   // Ebene, deren Look gerade bearbeitet wird (null = Foto)
+const TILT_KEYS = new Set(GROUPS.tilt.map(x => x[0]));
+const newLook = () => ({ p: { ...DEFAULTS }, fx: 'none', inherit: true });
+const targetObj = () => target ? S.objs.find(o => o.id === target) || null : null;
+function TP() { const o = targetObj(); return o && o.look ? o.look.p : S.p; }      // Regler-Werte des aktuellen Ziels
+function TFX() { const o = targetObj(); return o && o.look ? o.look.fx : S.fx; }
+function setTFX(t) { const o = targetObj(); if (o && o.look) o.look.fx = t; else S.fx = t; }
+const pOf = key => TILT_KEYS.has(key) ? S.p : TP();                                 // Tilt-Shift gilt nur fürs Foto
+function hasLook(ob) {
+  if (!ob.look) return false;
+  if (ob.look.fx !== 'none') return true;
+  for (const k in ob.look.p) if (!TILT_KEYS.has(k) && ob.look.p[k] !== DEFAULTS[k]) return true;
+  return false;
+}
+const layerCache = new Map();                       // id → { key, cv, bx, by, bw, bh }
+// Ausgangsbild der Ebene + Box in Objekt-Koordinaten (Basis-Pixel, ohne Skalierung/Drehung). k = Ziel-Pixel je Basis-Pixel
+function layerSource(ob, k, proc, orig) {
+  const bw0 = base.width, bh0 = base.height, U = Math.sqrt(bw0 * bh0);
+  if (ob.type === 'image') {
+    const a = assets.get(ob.asset); if (!a) return null;
+    const w = ob.w * U, h = ob.h * U;
+    return { cv: a.img, bx: -w / 2, by: -h / 2, bw: w, bh: h };
+  }
+  if (ob.type === 'cut') {
+    const g = cutGeom(ob), src = ob.look.inherit ? proc : orig;
+    const cw = Math.max(1, Math.round(g.w * src.k)), ch = Math.max(1, Math.round(g.h * src.k));
+    const cv = document.createElement('canvas'); cv.width = cw; cv.height = ch;
+    drawSrc(cv.getContext('2d'), src, g.x, g.y, g.w, g.h, 0, 0, cw, ch);
+    return { cv, bx: g.x - g.cx, by: g.y - g.cy, bw: g.w, bh: g.h };
+  }
+  // Text: in Zielauflösung rastern (inkl. Rand für Schatten/Leuchten)
+  const L = textLayout(ob, U), m = L.F * 0.5, bw = L.bw + 2 * m, bh = L.bh + 2 * m;
+  const rk = Math.max(0.05, Math.min(ob.s * k, 4096 / Math.max(bw, bh)));
+  const cv = document.createElement('canvas'); cv.width = Math.max(1, Math.round(bw * rk)); cv.height = Math.max(1, Math.round(bh * rk));
+  const x = cv.getContext('2d'); x.setTransform(rk, 0, 0, rk, bw / 2 * rk, bh / 2 * rk);
+  drawText(x, ob, U);
+  return { cv, bx: -bw / 2, by: -bh / 2, bw, bh };
+}
+// Farbe transparenter Pixel aus deckenden Nachbarn auffüllen → keine dunklen Ränder bei Unschärfe/Kanten-Effekten
+function bleedAlpha(id) {
+  const d = id.data, w = id.width, h = id.height, n = w * h;
+  let any = false; for (let i = 3; i < d.length; i += 4) if (d[i] < 255) { any = true; break; }
+  if (!any) return;
+  let filled = new Uint8Array(n); for (let i = 0; i < n; i++) filled[i] = d[4 * i + 3] > 8 ? 1 : 0;
+  for (let pass = 0; pass < 6; pass++) {
+    const next = filled.slice(); let changed = false;
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      const i = y * w + x; if (filled[i]) continue;
+      let r = 0, g = 0, b = 0, c = 0;
+      if (x > 0 && filled[i - 1]) { r += d[4*i-4]; g += d[4*i-3]; b += d[4*i-2]; c++; }
+      if (x < w - 1 && filled[i + 1]) { r += d[4*i+4]; g += d[4*i+5]; b += d[4*i+6]; c++; }
+      if (y > 0 && filled[i - w]) { const j = 4 * (i - w); r += d[j]; g += d[j+1]; b += d[j+2]; c++; }
+      if (y < h - 1 && filled[i + w]) { const j = 4 * (i + w); r += d[j]; g += d[j+1]; b += d[j+2]; c++; }
+      if (c) { d[4*i] = r / c; d[4*i+1] = g / c; d[4*i+2] = b / c; next[i] = 1; changed = true; }
+    }
+    filled = next; if (!changed) break;
+  }
+}
+// Look einer Ebene berechnen (GPU-Textursatz 'aux'). k: Ziel-Pixel je Basis-Pixel (Vorschau 1, Export > 1)
+function processLayer(ob, k, proc, orig) {
+  const sl = layerSource(ob, k, proc, orig); if (!sl) return null;
+  const cap = k > 1.01 ? (GL ? Math.min(4096, GL.maxTex) : 4096) : 1400;
+  const f = Math.min(1, cap / Math.max(sl.cv.width, sl.cv.height));
+  const w = Math.max(1, Math.round(sl.cv.width * f)), h = Math.max(1, Math.round(sl.cv.height * f));
+  const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+  const cx = cv.getContext('2d', { willReadFrequently: true }); cx.imageSmoothingQuality = 'high';
+  cx.drawImage(sl.cv, 0, 0, w, h);
+  const id = cx.getImageData(0, 0, w, h);
+  bleedAlpha(id);
+  const p = { ...ob.look.p, tsBlur: 0 };
+  const needDet = p.structure !== 0 || p.sharpness !== 0;
+  const det = needDet ? computeDetail(id.data, w, h, 1, Math.max(2, Math.round(Math.min(w, h) * 0.012))) : null;
+  const scale = (w / sl.bw) / Math.max(0.01, ob.s);  // Ebenen-Pixel je Basis-Pixel → Linienstärken wie beim Foto
+  if (GL) {
+    glUpload(id.data, w, h, det ? toRG(det) : null, 'aux');
+    glRun(p, { C: [w / 2, h / 2], N: [0, 1], HW: 0, F: 1, R: 0, L: Math.min(w, h), crop: [0, 0, w, h], mask: false, fx: ob.look.fx }, scale, 'aux');
+    cx.clearRect(0, 0, w, h); cx.drawImage(GL.c, 0, 0);
+  } else {
+    const out = cx.createImageData(w, h); process(id, w, h, p, det, out); cx.putImageData(out, 0, 0);
+  }
+  if (p.vignette) { cx.globalCompositeOperation = 'source-atop'; drawVignette(cx, 0, 0, w, h, p.vignette); cx.globalCompositeOperation = 'source-over'; }
+  return { cv, bx: sl.bx, by: sl.by, bw: sl.bw, bh: sl.bh };
+}
+function layerKey(ob, k) {
+  const t = ob.type;
+  return JSON.stringify([ob.look, t, base.width, base.height, k,
+    t === 'text' ? [ob.text, ob.font, ob.bold, ob.color, ob.stroke, ob.strokeColor, ob.shadow, ob.bg, ob.align, Math.round(ob.s * 100)]
+    : t === 'cut' ? [ob.pts, ob.look.inherit ? baseVer : 0] : ob.asset]);
+}
+// Vorschau: Ebenen-Looks bei Bedarf neu berechnen (vor dem Zeichnen)
+function processLayers() {
+  if (!base || cam.on) return;
+  for (const ob of S.objs) {
+    if (ob.hidden || !hasLook(ob)) continue;
+    const key = layerKey(ob, 1), c = layerCache.get(ob.id);
+    if (c && c.key === key) continue;
+    const r = processLayer(ob, 1, previewSrc(), { canvas: base, bx: 0, by: 0, k: 1 });
+    if (r) { r.key = key; layerCache.set(ob.id, r); }
+  }
+}
 /* =====================================================================
    7. OVERLAYS (Zuschnitt, Tilt-Shift, Ebenen)
    ===================================================================== */
@@ -2050,9 +2216,9 @@ for (const [g, list] of Object.entries(GROUPS)) {
       <input id="s-${key}" type="range" min="${min}" max="${max}" step="1">`;
     row.querySelector('label').textContent = label;
     const inp = row.querySelector('input'), val = row.querySelector('.val');
-    inp.addEventListener('input', () => { S.p[key] = +inp.value; paintSlider(key); schedule(); });
+    inp.addEventListener('input', () => { pOf(key)[key] = +inp.value; paintSlider(key); schedule(); });
     inp.addEventListener('change', commit);
-    const reset = () => { S.p[key] = DEFAULTS[key]; paintSlider(key); schedule(); commit(); };
+    const reset = () => { pOf(key)[key] = DEFAULTS[key]; paintSlider(key); schedule(); commit(); };
     val.addEventListener('click', reset);
     enhanceSlider(inp, reset);
     sliders[key] = { inp, val, min, max, unit: UNITS[key] || '' };
@@ -2060,7 +2226,7 @@ for (const [g, list] of Object.entries(GROUPS)) {
   }
 }
 function paintSlider(key) {
-  const s = sliders[key], v = S.p[key];
+  const s = sliders[key], v = pOf(key)[key];
   s.inp.value = v;
   s.val.textContent = (v > 0 && s.min < 0 ? '+' : '') + v + s.unit;
   s.val.classList.toggle('on', v !== DEFAULTS[key]);
@@ -2072,7 +2238,7 @@ function paintSlider(key) {
 const syncSliders = () => KEYS.forEach(paintSlider);
 document.querySelectorAll('[data-reset]').forEach(b => b.onclick = () => {
   const g = b.dataset.reset;
-  GROUPS[g].forEach(([k]) => S.p[k] = DEFAULTS[k]);
+  GROUPS[g].forEach(([k]) => pOf(k)[k] = DEFAULTS[k]);
   if (g === 'tilt') { S.ts = { x: .5, y: .5, mode: 'linear' }; syncTsMode(); }
   syncSliders(); schedule(); commit();
 });
@@ -2105,14 +2271,17 @@ FILTERS.forEach(([name, preset]) => {
 });
 // Quadratischer Mini-Ausschnitt (Mitte des Zuschnitts) für Vorschaukacheln; lädt ihn auf die GPU
 function thumbSource(T) {
-  const srcCv = cam.on ? camCv : base;
-  const c = cam.on ? { x: 0, y: 0, w: 1, h: 1 } : S.crop, bw = srcCv.width, bh = srcCv.height;
-  const sw = c.w*bw, sh = c.h*bh, side = Math.min(sw, sh);
+  const tob = !cam.on && targetObj();                  // Ebene als Ziel → Kacheln zeigen die Ebene
+  const ls = tob ? layerSource(tob, 1, previewSrc(), { canvas: base, bx: 0, by: 0, k: 1 }) : null;
+  const srcCv = ls ? ls.cv : cam.on ? camCv : base;
+  const c = ls || cam.on ? { x: 0, y: 0, w: 1, h: 1 } : S.crop, bw = srcCv.width, bh = srcCv.height;
+  const sw = c.w*bw, sh = c.h*bh, side = ls ? Math.max(sw, sh) : Math.min(sw, sh);
   const t = document.createElement('canvas'); t.width = t.height = T;
-  const tc = t.getContext('2d'); tc.imageSmoothingQuality = 'high';
+  const tc = t.getContext('2d', { willReadFrequently: true }); tc.imageSmoothingQuality = 'high';
+  if (ls) { tc.fillStyle = '#9a9ea6'; tc.fillRect(0, 0, T, T); }   // Ebene ganz zeigen, auf neutralem Grund
   tc.drawImage(srcCv, c.x*bw + (sw - side)/2, c.y*bh + (sh - side)/2, side, side, 0, 0, T, T);
   const data = tc.getImageData(0, 0, T, T), det = computeDetail(data.data, T, T, 1, 2);
-  if (GL) { glUpload(data.data, T, T, toRG(det)); GL.state = 'other'; }
+  if (GL) glUpload(data.data, T, T, toRG(det), 'aux');
   return { data, det };
 }
 const thumbGeo = (T, fx) => ({ C: [0, 0], N: [0, 1], HW: 0, F: 1, R: 0, L: T, mask: false, crop: [0, 0, T, T], fx });
@@ -2120,22 +2289,22 @@ function buildThumbs() {
   if (!base && !(cam.on && cam.ready)) return;
   const T = 112, { data, det } = thumbSource(T);
   fltBtns.forEach(f => {
-    const p = { ...S.p };
+    const p = { ...TP() };
     for (const k of FILTER_KEYS) p[k] = DEFAULTS[k];
     Object.assign(p, f.preset, { tsBlur: 0 });
     const x = f.cv.getContext('2d');
-    if (GL) { glRun(p, thumbGeo(T), 0.5); x.clearRect(0, 0, T, T); x.drawImage(GL.c, 0, 0); }
+    if (GL) { glRun(p, thumbGeo(T, TFX()), 0.5, 'aux'); x.clearRect(0, 0, T, T); x.drawImage(GL.c, 0, 0); }
     else { const out = new ImageData(T, T); process(data, T, T, p, det, out); x.putImageData(out, 0, 0); }
     drawVignette(x, 0, 0, T, T, p.vignette);
   });
   if (GL) schedule();
 }
-function applyFilter(preset) { for (const k of FILTER_KEYS) S.p[k] = DEFAULTS[k]; Object.assign(S.p, preset); syncSliders(); schedule(); commit(); }
+function applyFilter(preset) { const P = TP(); for (const k of FILTER_KEYS) P[k] = DEFAULTS[k]; Object.assign(P, preset); syncSliders(); schedule(); commit(); }
 // Index des Filters, der den aktuellen Einstellungen genau entspricht (sonst -1)
 function filterIndex() {
   return FILTERS.findIndex(([, preset]) => {
     const p = {}; for (const k of FILTER_KEYS) p[k] = DEFAULTS[k]; Object.assign(p, preset);
-    return FILTER_KEYS.every(k => p[k] === S.p[k]);
+    const P = TP(); return FILTER_KEYS.every(k => p[k] === P[k]);
   });
 }
 function markFilter() {
@@ -2156,16 +2325,17 @@ FX.forEach(([t, name]) => {
 });
 function chooseFx(t) {
   if (t !== 'none' && !GL) { toast('Kreativ-Effekte brauchen WebGL2 – dein Browser unterstützt das leider nicht.'); return; }
-  S.fx = t; syncFx(); schedule(); commit();
+  setTFX(t); syncFx(); schedule(); commit();
 }
 function syncFx() {
   syncCamLooks();
-  fxBtns.forEach(f => f.b.classList.toggle('on', f.t === S.fx));
-  document.querySelectorAll('#fxSliders [data-group]').forEach(d => d.hidden = d.dataset.group !== FX_GROUP(S.fx));
-  $('#fxReset').hidden = S.fx === 'none';
+  const cur = TFX();
+  fxBtns.forEach(f => f.b.classList.toggle('on', f.t === cur));
+  document.querySelectorAll('#fxSliders [data-group]').forEach(d => d.hidden = d.dataset.group !== FX_GROUP(cur));
+  $('#fxReset').hidden = cur === 'none';
 }
 $('#fxReset').onclick = () => {
-  (GROUPS[FX_GROUP(S.fx)] || []).forEach(([k]) => S.p[k] = DEFAULTS[k]);
+  (GROUPS[FX_GROUP(TFX())] || []).forEach(([k]) => TP()[k] = DEFAULTS[k]);
   syncSliders(); schedule(); commit();
 };
 function buildFxThumbs() {
@@ -2173,13 +2343,31 @@ function buildFxThumbs() {
   const T = 112, { data } = thumbSource(T);
   fxBtns.forEach(f => {
     const x = f.cv.getContext('2d');
-    if (GL) { glRun({ ...S.p, tsBlur: 0 }, thumbGeo(T, f.t), 0.5); x.clearRect(0, 0, T, T); x.drawImage(GL.c, 0, 0); }
+    if (GL) { glRun({ ...TP(), tsBlur: 0 }, thumbGeo(T, f.t), 0.5, 'aux'); x.clearRect(0, 0, T, T); x.drawImage(GL.c, 0, 0); }
     else if (f.t === 'none') x.putImageData(data, 0, 0);
   });
   if (GL) schedule();
 }
 syncFx();
 
+// --- Ziel der Regler: Foto oder eine Ebene ---
+function setTarget(id) {
+  const o = id ? S.objs.find(x => x.id === id) : null;
+  if (o && !o.look) o.look = newLook();
+  target = o ? o.id : null;
+  syncSliders(); syncFx(); syncTargetUI();
+  if (tab === 'filter') buildThumbs();
+  if (tab === 'effects' && subs.effects === 'fx') buildFxThumbs();
+  schedule();
+}
+function syncTargetUI() {
+  const o = targetObj();
+  $('#targetBar').hidden = !(o && (tab === 'adjust' || tab === 'effects' || tab === 'filter'));
+  if (o) $('#targetName').textContent = itemName(o);
+  $('#tiltLayerNote').hidden = !o;
+  document.querySelectorAll('[data-panel="effects"] .sub[data-sub="tilt"] > :not(#tiltLayerNote)').forEach(e => e.classList.toggle('off', !!o));
+}
+$('#targetDone').onclick = () => { const id = target; setTarget(null); if (id) { setTab('layers'); select(id); render(); } };
 // Haupt-Tabs
 document.querySelectorAll('.tab').forEach(t => t.onclick = () => setTab(t.dataset.tab));
 function setTab(t) {
@@ -2191,6 +2379,7 @@ function setTab(t) {
   if (t === 'effects' && subs.effects === 'fx') buildFxThumbs();
   if (t === 'layers') updateLayersUI(true);
   if (t === 'vector') scheduleVector(30);
+  syncTargetUI();
   render();
 }
 
@@ -2217,6 +2406,8 @@ function removeItem(id) {
   S.blurs = S.blurs.filter(r => r.id !== id);
   S.holes = S.holes.filter(r => r.id !== id);
   if (activeId === id) activeId = null;
+  if (target === id) setTarget(null);
+  layerCache.delete(id);
   updateLayersUI(true);
   if (blur) schedule();
 }
@@ -2475,7 +2666,7 @@ function itemName(it) {
   const blur = isBlurRegion(it), list = blur ? S.blurs : S.holes;
   return (blur ? 'Weichgezeichneter Bereich' : 'Gelöschter Bereich') + (list.length > 1 ? ' ' + (list.indexOf(it) + 1) : '');
 }
-const itemKind = it => it.type === 'text' ? 'Text' : it.type === 'image' ? 'Bild' : it.type === 'cut' ? 'Ausschnitt' : isBlurRegion(it) ? 'Unschärfe' : 'Gelöscht';
+const itemKind = it => (it.type === 'text' ? 'Text' : it.type === 'image' ? 'Bild' : it.type === 'cut' ? 'Ausschnitt' : isBlurRegion(it) ? 'Unschärfe' : 'Gelöscht') + (it.type && hasLook(it) ? ' · fx' : '');
 
 let propsFor = null, propCtl = {};
 function buildProps(a) {
@@ -2534,6 +2725,18 @@ function buildProps(a) {
   const op = mkSlider({ label: 'Deckkraft', min: 0, max: 100, value: Math.round(a.op * 100), def: 100, fmt: v => v + '%', onInput: v => { a.op = v / 100; render(); }, onChange: commit });
   const grid = el('div', 'sliders'); grid.append(sz.row, rt.row, op.row); box.appendChild(grid);
   propCtl = { sz, rt };
+  box.appendChild(lbl('EINSTELLUNGEN & EFFEKTE DIESER EBENE'));
+  const la = el('div', 'tools compact');
+  const editBtn = tbtn(hasLook(a) ? 'Bearbeiten' : 'Einstellungen & Effekte …', () => { setTarget(a.id); setTab(tab === 'layers' ? 'adjust' : tab); });
+  editBtn.classList.add('accentbtn'); la.append(editBtn);
+  if (hasLook(a)) la.append(tbtn('Zurücksetzen', () => { a.look = newLook(); layerCache.delete(a.id); commit(); updateLayersUI(true); render(); }));
+  box.appendChild(la);
+  if (a.type === 'cut') {
+    box.appendChild(mkChips([['1', 'Foto-Look übernehmen'], ['0', 'Nur eigener Look']], (a.look ? a.look.inherit : true) ? '1' : '0', v => {
+      if (!a.look) a.look = newLook();
+      a.look.inherit = v === '1'; commit(); render();
+    }));
+  }
   box.appendChild(lbl('MISCHMODUS'));
   box.appendChild(mkChips(BLENDS, a.blend || 'source-over', v => { a.blend = v; render(); commit(); }));
   const acts = el('div', 'tools compact');
@@ -2610,7 +2813,7 @@ function scheduleVector(delay) {
 }
 function runVector() {
   if (!base || tab !== 'vector') return;
-  runProcess();
+  runProcess(); processLayers();
   const c = S.crop, bw = base.width, bh = base.height, cw = c.w * bw, ch = c.h * bh;
   const maxSide = Math.round(300 + V.detail / 100 * 1100);
   const k = Math.min(1.5, maxSide / Math.max(cw, ch));
@@ -2843,6 +3046,8 @@ function restore(s) {
   S.p = { ...DEFAULTS, ...o.p }; S.ts = o.ts; S.crop = o.crop; S.rot = o.rot; S.fh = o.fh; S.fv = o.fv;
   S.objs = o.objs; S.holes = o.holes; S.blurs = o.blurs || []; S.fx = o.fx || 'none'; syncFx(); sel = null;
   if (!findItem(activeId)) activeId = null;
+  if (target) { const o = S.objs.find(x => x.id === target); if (!o || !o.look) target = null; }
+  syncTargetUI();
   if (reb && img) rebuildBase();
   syncSliders(); syncTsMode(); updateLayersUI(true); schedule(); updHist();
   if (tab === 'vector') scheduleVector(100);
@@ -2858,6 +3063,8 @@ document.addEventListener('keydown', e => {
   if (cam.on && e.key === 'Escape') { cam.fs ? setCamFs(false) : stopCam(); return; }
   if (isTyping() || !base) return;
   const mod = e.ctrlKey || e.metaKey, k = e.key.toLowerCase();
+  if (viewFs && k === 'escape') { setViewFs(false); return; }
+  if (k === 'f' && !mod && !e.altKey) { setViewFs(!viewFs); return; }
   if (mod && k === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); }
   else if (mod && k === 'y') { e.preventDefault(); redo(); }
   else if (mod && k === 'c' && (sel || activeObj())) doCopy(false);
@@ -2887,7 +3094,7 @@ function useImage(im, url, name, keepLook) {
     fileName = (name || 'bild').replace(/\.[^.]+$/, '') || 'bild';
     if (!keepLook) { S.p = { ...DEFAULTS }; S.ts = { x: .5, y: .5, mode: 'linear' }; S.fx = 'none'; }
     S.crop = { x: 0, y: 0, w: 1, h: 1 }; S.rot = 0; S.fh = S.fv = false; S.objs = []; S.holes = []; S.blurs = []; syncFx();
-    assets.clear(); activeId = null; sel = null; clip = null;
+    assets.clear(); activeId = null; sel = null; clip = null; target = null; layerCache.clear(); syncTargetUI();
     vz.z = 1; vz.px = vz.py = 0;
     if (vecUrl) { URL.revokeObjectURL(vecUrl); vecUrl = null; vecSvg = null; $('#vecSave').disabled = true; }
     setAspect('free', false);
@@ -2895,7 +3102,7 @@ function useImage(im, url, name, keepLook) {
     hist = []; fut = []; cur = snap(); updHist();
     document.body.classList.remove('noimg');
     $('#empty').style.display = 'none';
-    ['#btnCompare', '#btnSave'].forEach(s => $(s).disabled = false);
+    ['#btnCompare', '#btnSave', '#btnFs'].forEach(s => $(s).disabled = false);
     syncSliders(); syncTsMode(); setTab(tab); schedule();
   }
 }
@@ -2928,11 +3135,11 @@ function camGeom(w, h) {
   return { C: [S.ts.x * w, S.ts.y * h], N: [-Math.sin(a), Math.cos(a)], HW: S.p.tsSize / 100 * 0.5 * Lr,
            F: (0.04 + S.p.tsFeather / 100 * 0.6) * Lr, R: S.p.tsBlur / 100 * 0.03 * Lr, L: Lr, crop: [0, 0, w, h], mask: false };
 }
-function glUploadCanvas(cv, w, h) {
-  const { gl } = GL;
-  gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, GL.imgTex);
+function glUploadCanvas(cv, w, h, set = 'aux') {
+  const { gl } = GL, T = GL.sets[set];
+  gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, T.img);
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE, cv);
-  GL.w = w; GL.h = h; GL.hasDet = false;
+  T.w = w; T.h = h; T.hasDet = false;
 }
 function camFrame() {
   const vw = camVideo.videoWidth, vh = camVideo.videoHeight;
@@ -2946,10 +3153,9 @@ function camFrame() {
   if (GL) {
     if (S.p.structure !== 0 || S.p.sharpness !== 0) {          // Struktur/Schärfe brauchen CPU-Detaildaten
       const d = camCtx.getImageData(0, 0, w, h);
-      glUpload(d.data, w, h, toRG(computeDetail(d.data, w, h, 1, Math.max(3, Math.round(Math.min(w, h) * 0.012)))));
-    } else glUploadCanvas(camCv, w, h);
-    GL.state = 'other';
-    glRun(S.p, camGeom(w, h), 1);
+      glUpload(d.data, w, h, toRG(computeDetail(d.data, w, h, 1, Math.max(3, Math.round(Math.min(w, h) * 0.012)))), 'aux');
+    } else glUploadCanvas(camCv, w, h, 'aux');
+    glRun(S.p, camGeom(w, h), 1, 'aux');
     camOutCtx.clearRect(0, 0, w, h); camOutCtx.drawImage(GL.c, 0, 0);
   } else {
     const d = camCtx.getImageData(0, 0, w, h), out = camOutCtx.createImageData(w, h);
@@ -3054,9 +3260,13 @@ async function startCam() {
   cam.proc = matchMedia('(pointer: coarse)').matches ? 720 : 1080;
   camVideo.srcObject = cam.stream;
   try { await camVideo.play(); } catch (_) {}
+  if (target) setTarget(null);
   cam.on = true; cam.ready = false; gest = null;
   document.body.classList.add('cam'); document.body.classList.remove('noimg');
   ['#btnSave', '#btnCompare'].forEach(q => $(q).disabled = true);
+  if (viewFs) setViewFs(false);
+  $('#btnFs').disabled = false;
+  applyPanelSize();
   if (split.on) setSplit(false);
   if (tab === 'crop' || tab === 'layers' || tab === 'vector') setTab('adjust');
   try { const devs = await navigator.mediaDevices.enumerateDevices(); $('#camFlip').hidden = devs.filter(d => d.kind === 'videoinput').length < 2; } catch (_) {}
@@ -3073,7 +3283,8 @@ function stopCam() {
   document.body.classList.remove('cam');
   document.body.classList.toggle('noimg', !base);
   ['#btnSave', '#btnCompare'].forEach(q => $(q).disabled = !base);
-  if (GL) GL.state = 'other';
+  $('#btnFs').disabled = !base;
+  applyPanelSize();
   setTab(tab); schedule();
 }
 async function flipCam() {
@@ -3120,7 +3331,11 @@ async function setCamFs(on) {
   }
   render();
 }
-document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement && cam.fs) setCamFs(false); });   // z. B. Zurück-Taste
+document.addEventListener('fullscreenchange', () => {   // z. B. Zurück-Taste beendet das Browser-Vollbild
+  if (document.fullscreenElement) return;
+  if (cam.fs) setCamFs(false);
+  if (viewFs) setViewFs(false);
+});
 $('#camFs').onclick = () => setCamFs(!cam.fs);
 
 // Look-Leiste im Vollbild: Filter oder Kreativ-Effekte als Chips
@@ -3136,7 +3351,7 @@ function syncCamLooks(scroll) {
   if (!camLookEls) return;
   document.querySelectorAll('#camLookCat button').forEach(b => b.classList.toggle('on', b.dataset.cat === cam.lookCat));
   $('#camLookFilter').hidden = cam.lookCat !== 'filter'; $('#camLookFx').hidden = cam.lookCat !== 'fx';
-  const fi = filterIndex(), xi = FX.findIndex(f => f[0] === S.fx);
+  const fi = filterIndex(), xi = FX.findIndex(f => f[0] === TFX());
   camLookEls.filter.forEach((c, i) => c.classList.toggle('on', i === fi));
   camLookEls.fx.forEach((c, i) => c.classList.toggle('on', i === xi));
   if (scroll) { const on = (cam.lookCat === 'filter' ? camLookEls.filter[fi] : camLookEls.fx[xi]); if (on) on.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' }); }
@@ -3147,7 +3362,7 @@ function cycleLook(dir) {
     const i = ((filterIndex() < 0 ? 0 : filterIndex()) + dir + FILTERS.length) % FILTERS.length;
     applyFilter(FILTERS[i][1]); showCamLabel(FILTERS[i][0]);
   } else {
-    const i = (Math.max(0, FX.findIndex(f => f[0] === S.fx)) + dir + FX.length) % FX.length;
+    const i = (Math.max(0, FX.findIndex(f => f[0] === TFX())) + dir + FX.length) % FX.length;
     chooseFx(FX[i][0]); showCamLabel(FX[i][1]);
   }
   syncCamLooks(true);
@@ -3157,6 +3372,89 @@ function showCamLabel(text) {
   const l = $('#camLabel'); l.textContent = text; l.classList.add('show');
   clearTimeout(camLabelT); camLabelT = setTimeout(() => l.classList.remove('show'), 900);
 }
+
+/* =====================================================================
+   14c. VOLLBILD-VORSCHAU (Bearbeiten) & GRÖSSE DES EINSTELLUNGSBEREICHS
+   ===================================================================== */
+let viewFs = false, fsPrevTab = null, viewFsHinted = false;
+async function setViewFs(on) {
+  if (on === viewFs || (on && !base) || cam.on) return;
+  viewFs = on;
+  document.body.classList.toggle('viewfs', on);
+  if (on) {
+    // Im Vollbild reine Ansicht: Tabs mit eigener Bildbedienung (Zuschnitt, Ebenen, Tilt-Fokus) vorübergehend verlassen
+    fsPrevTab = tab;
+    if (tab === 'crop' || tab === 'layers' || (tab === 'effects' && subs.effects === 'tilt')) setTab('adjust');
+    try { if (document.documentElement.requestFullscreen && !document.fullscreenElement) await document.documentElement.requestFullscreen({ navigationUI: 'hide' }); } catch (_) {}
+    if (!viewFsHinted) { viewFsHinted = true; toast('Wischen = Vorher/Nachher · Doppeltippen oder zwei Finger = Zoom'); }
+  } else {
+    try { if (document.fullscreenElement) await document.exitFullscreen(); } catch (_) {}
+    if (fsPrevTab && fsPrevTab !== tab) setTab(fsPrevTab);
+  }
+  render();
+}
+$('#btnFs').onclick = () => cam.on ? setCamFs(!cam.fs) : setViewFs(!viewFs);
+$('#viewFsExit').onclick = () => setViewFs(false);
+
+// Größe des Einstellungsbereichs: Handy = Höhe (getrennt für Bearbeiten/Kamera), Computer = Breite. Wird gemerkt.
+const UI_KEY = 'bildstudio.ui';
+let ui = { edit: null, cam: null, w: null, last: null };
+try { ui = Object.assign(ui, JSON.parse(localStorage.getItem(UI_KEY) || '{}')); } catch (_) {}
+const saveUi = () => { try { localStorage.setItem(UI_KEY, JSON.stringify(ui)); } catch (_) {} };
+const isDesk = () => matchMedia('(min-width:900px)').matches;
+const panelsEl = $('.panels'), asideEl = $('aside'), grip = $('#grip');
+function maxPanelH() { return Math.max(80, window.innerHeight - $('header').offsetHeight - $('.tabs').offsetHeight - 150); }
+function applyPanelSize() {
+  if (isDesk()) {
+    Object.assign(panelsEl.style, { height: '', maxHeight: '', minHeight: '' }); panelsEl.classList.remove('collapsed');
+    asideEl.style.width = ui.w ? clamp(ui.w, 260, Math.round(window.innerWidth * 0.6)) + 'px' : '';
+  } else {
+    asideEl.style.width = '';
+    const h = ui[cam.on ? 'cam' : 'edit'];
+    if (h == null) { Object.assign(panelsEl.style, { height: '', maxHeight: '', minHeight: '' }); panelsEl.classList.remove('collapsed'); }
+    else {
+      const v = Math.min(h, maxPanelH());
+      Object.assign(panelsEl.style, { height: v + 'px', maxHeight: v + 'px', minHeight: '0px' });
+      panelsEl.classList.toggle('collapsed', v === 0);
+    }
+  }
+}
+function setPanelH(h) {
+  h = clamp(Math.round(h), 0, maxPanelH());
+  if (h < 44) h = 0;                                 // fast zu → ganz einklappen
+  ui[cam.on ? 'cam' : 'edit'] = h;
+  applyPanelSize();
+}
+let gdrag = null;
+grip.addEventListener('pointerdown', e => {
+  if (e.button > 0) return;
+  gdrag = { desk: isDesk(), sx: e.clientX, sy: e.clientY, h0: panelsEl.getBoundingClientRect().height, w0: asideEl.getBoundingClientRect().width, moved: false };
+  try { grip.setPointerCapture(e.pointerId); } catch (_) {}
+  grip.classList.add('drag'); e.preventDefault();
+});
+grip.addEventListener('pointermove', e => {
+  if (!gdrag) return;
+  const dx = e.clientX - gdrag.sx, dy = e.clientY - gdrag.sy;
+  if (!gdrag.moved && Math.abs(dx) + Math.abs(dy) < 4) return;
+  gdrag.moved = true;
+  if (gdrag.desk) { ui.w = clamp(Math.round(gdrag.w0 - dx), 260, Math.round(window.innerWidth * 0.6)); applyPanelSize(); }
+  else setPanelH(gdrag.h0 - dy);
+});
+function gripEnd(e, cancelled) {
+  if (!gdrag) return;
+  const g = gdrag; gdrag = null; grip.classList.remove('drag');
+  if (!g.moved && !cancelled && !g.desk) {           // Antippen: ein-/ausklappen
+    const key = cam.on ? 'cam' : 'edit', curH = panelsEl.getBoundingClientRect().height;
+    if (curH > 2) { ui.last = Math.round(curH); setPanelH(0); }
+    else setPanelH(ui.last || Math.round(window.innerHeight * (cam.on ? 0.25 : 0.4)) - (cam.on ? 56 : 0));
+    ui[key] = ui[key];
+  } else if (!g.moved && !cancelled && g.desk) { ui.w = null; applyPanelSize(); }   // Computer: Klick = Standardbreite
+  saveUi();
+}
+grip.addEventListener('pointerup', e => gripEnd(e, false));
+grip.addEventListener('pointercancel', e => gripEnd(e, true));
+window.addEventListener('resize', applyPanelSize);
+applyPanelSize();
 
 /* =====================================================================
    15. EXPORT
@@ -3203,10 +3501,10 @@ async function renderExport() {
   const bx = px / k, by = py / k;
   if (GL) {
     const rg = det ? toRG(det) : null; det = null;
-    glUpload(data.data, pw, ph, rg); GL.state = 'other';
+    glUpload(data.data, pw, ph, rg, 'aux');
     const geo = tsGeom(bx, by, k);
     if (S.blurs.some(b => !b.hidden)) { glMask(pw, ph, bx, by, k); geo.mask = true; GL.maskKey = null; }
-    glRun(S.p, geo, k);
+    glRun(S.p, geo, k, 'aux');
     sctx.clearRect(0, 0, pw, ph);
     sctx.drawImage(GL.c, 0, 0);
   } else {
@@ -3214,8 +3512,20 @@ async function renderExport() {
     process(data, pw, ph, S.p, det, out);
     sctx.putImageData(out, 0, 0);
   }
+  // Ebenen mit eigenem Look in Export-Auflösung berechnen
+  const layers = new Map(), proc = { canvas: srcCv, bx, by, k };
+  let orig = null;                                   // unbearbeitetes Foto (nur für Ausschnitte ohne Foto-Look)
+  for (const ob of S.objs) {
+    if (ob.hidden || !hasLook(ob)) continue;
+    if (ob.type === 'cut' && !ob.look.inherit && !orig) {
+      const oc = document.createElement('canvas'); oc.width = pw; oc.height = ph; oc.getContext('2d').putImageData(data, 0, 0);
+      orig = { canvas: oc, bx, by, k };
+    }
+    const r = processLayer(ob, k, proc, orig || proc);
+    if (r) layers.set(ob.id, r);
+  }
   const cc = document.createElement('canvas'); cc.width = cw; cc.height = ch;
-  drawScene(cc.getContext('2d'), { ox: -cx, oy: -cy, k }, { canvas: srcCv, bx, by, k }, { full: false, vignette: true, holes: 'clear', objects: true });
+  drawScene(cc.getContext('2d'), { ox: -cx, oy: -cy, k }, { canvas: srcCv, bx, by, k, layers }, { full: false, vignette: true, holes: 'clear', objects: true });
   let final = cc;
   if (exportFmt === 'image/jpeg') {
     final = document.createElement('canvas'); final.width = cw; final.height = ch;
